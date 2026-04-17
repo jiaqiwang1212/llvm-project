@@ -5,24 +5,24 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This file declares the Cpu0 specific subclass of TargetMachine.
-//
-//===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_CPU0_CPU0TARGETMACHINE_H
 #define LLVM_LIB_TARGET_CPU0_CPU0TARGETMACHINE_H
 
+#include "MCTargetDesc/Cpu0ABIInfo.h"
+#include "Cpu0Subtarget.h"
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
 #include <optional>
 
 namespace llvm {
 
-class TargetLoweringObjectFile;
-
 class Cpu0TargetMachine : public CodeGenTargetMachineImpl {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
-  bool IsLittle;
+  Cpu0ABIInfo ABI;
+  Cpu0Subtarget DefaultSubtarget;
+
+  mutable StringMap<std::unique_ptr<Cpu0Subtarget>> SubtargetMap;
 
 public:
   Cpu0TargetMachine(const Target &T, const Triple &TT, StringRef CPU,
@@ -32,15 +32,16 @@ public:
                     bool JIT, bool IsLittle);
   ~Cpu0TargetMachine() override;
 
-  const TargetSubtargetInfo *getSubtargetImpl(const Function &) const override {
-    return nullptr;
-  }
+  const Cpu0Subtarget *getSubtargetImpl() const { return &DefaultSubtarget; }
+  const Cpu0Subtarget *getSubtargetImpl(const Function &F) const override;
+
+  TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
   }
 
-  bool isLittleEndian() const { return IsLittle; }
+  const Cpu0ABIInfo &getABI() const { return ABI; }
 };
 
 class Cpu0ebTargetMachine : public Cpu0TargetMachine {
@@ -61,6 +62,6 @@ public:
                       bool JIT);
 };
 
-} // end namespace llvm
+} // namespace llvm
 
-#endif // LLVM_LIB_TARGET_CPU0_CPU0TARGETMACHINE_H
+#endif

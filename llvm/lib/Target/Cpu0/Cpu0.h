@@ -20,6 +20,10 @@
 namespace llvm {
 class Cpu0TargetMachine;
 class FunctionPass;
+class PassRegistry;
+
+FunctionPass *createCpu0ISelDag(Cpu0TargetMachine &TM, CodeGenOptLevel OL);
+void initializeCpu0DAGToDAGISelLegacyPass(PassRegistry &);
 } // end namespace llvm
 
 #endif

@@ -5,19 +5,34 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// Implements the info about Cpu0 target spec.
-//
-//===----------------------------------------------------------------------===//
 
 #include "Cpu0TargetMachine.h"
 #include "Cpu0.h"
+#include "Cpu0ISelDAGToDAG.h"
+#include "Cpu0Subtarget.h"
+#include "Cpu0TargetObjectFile.h"
 #include "TargetInfo/Cpu0TargetInfo.h"
-#include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/MC/TargetRegistry.h"
 #include <optional>
 
 using namespace llvm;
+
+#define DEBUG_TYPE "cpu0"
+
+static std::string computeDataLayout(const Triple &TT, bool IsLittle) {
+  std::string Ret;
+  if (IsLittle)
+    Ret += "e";
+  else
+    Ret += "E";
+
+  Ret += "-m:m";
+  Ret += "-p:32:32";
+  Ret += "-i8:8:32-i16:16:32-i64:64";
+  Ret += "-n32-S64";
+  return Ret;
+}
 
 static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {
   return RM.value_or(Reloc::Static);
@@ -30,15 +45,60 @@ Cpu0TargetMachine::Cpu0TargetMachine(const Target &T, const Triple &TT,
                                      std::optional<CodeModel::Model> CM,
                                      CodeGenOptLevel OL, bool JIT,
                                      bool IsLittle)
-    : CodeGenTargetMachineImpl(T, TT.computeDataLayout(), TT, CPU, FS, Options,
-                               getEffectiveRelocModel(RM),
+    : CodeGenTargetMachineImpl(T, computeDataLayout(TT, IsLittle), TT, CPU, FS,
+                               Options, getEffectiveRelocModel(RM),
                                getEffectiveCodeModel(CM, CodeModel::Small), OL),
-      TLOF(std::make_unique<TargetLoweringObjectFileELF>()),
-      IsLittle(IsLittle) {
+      TLOF(std::make_unique<Cpu0TargetObjectFile>()),
+      ABI(Cpu0ABIInfo::computeTargetABI()),
+      DefaultSubtarget(TT, CPU, FS, IsLittle, *this) {
   initAsmInfo();
 }
 
 Cpu0TargetMachine::~Cpu0TargetMachine() = default;
+
+const Cpu0Subtarget *
+Cpu0TargetMachine::getSubtargetImpl(const Function &F) const {
+  Attribute CPUAttr = F.getFnAttribute("target-cpu");
+  Attribute FSAttr = F.getFnAttribute("target-features");
+
+  std::string CPU =
+      CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
+  std::string FS =
+      FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
+
+  auto &I = SubtargetMap[CPU + FS];
+  if (!I) {
+    resetTargetOptions(F);
+    I = std::make_unique<Cpu0Subtarget>(TargetTriple, CPU, FS,
+                                        DefaultSubtarget.isLittle(), *this);
+  }
+  return I.get();
+}
+
+namespace {
+
+class Cpu0PassConfig : public TargetPassConfig {
+public:
+  Cpu0PassConfig(Cpu0TargetMachine &TM, PassManagerBase &PM)
+      : TargetPassConfig(TM, PM) {}
+
+  Cpu0TargetMachine &getCpu0TargetMachine() const {
+    return getTM<Cpu0TargetMachine>();
+  }
+
+  bool addInstSelector() override;
+};
+
+} // namespace
+
+TargetPassConfig *Cpu0TargetMachine::createPassConfig(PassManagerBase &PM) {
+  return new Cpu0PassConfig(*this, PM);
+}
+
+bool Cpu0PassConfig::addInstSelector() {
+  addPass(createCpu0ISelDag(getCpu0TargetMachine(), getOptLevel()));
+  return false;
+}
 
 Cpu0ebTargetMachine::Cpu0ebTargetMachine(const Target &T, const Triple &TT,
                                          StringRef CPU, StringRef FS,
@@ -61,4 +121,6 @@ Cpu0elTargetMachine::Cpu0elTargetMachine(const Target &T, const Triple &TT,
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeCpu0Target() {
   RegisterTargetMachine<Cpu0ebTargetMachine> X(getTheCpu0Target());
   RegisterTargetMachine<Cpu0elTargetMachine> Y(getTheCpu0elTarget());
+  PassRegistry *PR = PassRegistry::getPassRegistry();
+  initializeCpu0DAGToDAGISelLegacyPass(*PR);
 }
