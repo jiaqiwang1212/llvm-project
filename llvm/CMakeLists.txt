@@ -594,6 +594,7 @@ set(LLVM_ALL_TARGETS
 set(LLVM_ALL_EXPERIMENTAL_TARGETS
   ARC
   CSKY
+  Cpu0
   DirectX
   M68k
   Xtensa

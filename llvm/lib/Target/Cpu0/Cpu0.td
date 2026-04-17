@@ -100,6 +100,8 @@ def : Proc<"cpu032II", [FeatureCpu032II]>;
 //  as follows,
 // void Cpu0InstPrinter::printInstruction(const MCInst *MI, raw_ostream &O) {...}
 // const char *Cpu0InstPrinter::getRegisterName(unsigned RegNo) {...}
+defm : RemapAllTargetPseudoPointerOperands<CPURegs>;
+
 def Cpu0 : Target {
   let InstructionSet = Cpu0InstrInfo;
 }
