@@ -59,6 +59,8 @@ public:
     bpfel,       // eBPF or extended BPF or 64-bit BPF (little endian)
     bpfeb,       // eBPF or extended BPF or 64-bit BPF (big endian)
     csky,        // CSKY: csky
+    cpu0,        // Cpu0: tutorial backend cpu0 (big endian)
+    cpu0el,      // Cpu0: tutorial backend cpu0 (little endian)
     dxil,        // DXIL 32-bit DirectX bytecode
     hexagon,     // Hexagon: hexagon
     loongarch32, // LoongArch (32-bit): loongarch32

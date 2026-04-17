@@ -561,6 +561,12 @@ std::string Triple::computeDataLayout(StringRef ABIName) const {
     return computeBPFDataLayout(*this);
   case Triple::csky:
     return computeCSKYDataLayout(*this);
+  case Triple::cpu0:
+    return "E-m:m-p:32:32-i8:8:32-i16:16:32-i32:32:32-i64:64:64-"
+           "f32:32:32-f64:64:64-v64:64:64-v128:128:128-a:0:64-n32-S64";
+  case Triple::cpu0el:
+    return "e-m:m-p:32:32-i8:8:32-i16:16:32-i32:32:32-i64:64:64-"
+           "f32:32:32-f64:64:64-v64:64:64-v128:128:128-a:0:64-n32-S64";
   case Triple::dxil:
     return "e-m:e-ve-p:32:32-i1:32-i8:8-i16:16-i32:32-i64:64-f16:16-"
            "f32:32-f64:64-n8:16:32:64";

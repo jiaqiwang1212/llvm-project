@@ -52,6 +52,10 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
     return "bpfel";
   case csky:
     return "csky";
+  case cpu0:
+    return "cpu0";
+  case cpu0el:
+    return "cpu0el";
   case dxil:
     return "dxil";
   case hexagon:
@@ -341,6 +345,9 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
     return "ve";
   case csky:
     return "csky";
+  case cpu0:
+  case cpu0el:
+    return "cpu0";
 
   case loongarch32:
   case loongarch64:
@@ -720,6 +727,8 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
       .Case("renderscript64", renderscript64)
       .Case("ve", ve)
       .Case("csky", csky)
+      .Cases({"cpu0", "cpu0eb"}, cpu0)
+      .Case("cpu0el", cpu0el)
       .Case("loongarch32", loongarch32)
       .Case("loongarch64", loongarch64)
       .Case("dxil", dxil)
@@ -870,6 +879,8 @@ Triple::ArchType Triple::parseArch(StringRef ArchName) {
           .Case("wasm32", Triple::wasm32)
           .Case("wasm64", Triple::wasm64)
           .Case("csky", Triple::csky)
+          .Cases({"cpu0", "cpu0eb"}, Triple::cpu0)
+          .Case("cpu0el", Triple::cpu0el)
           .Case("loongarch32", Triple::loongarch32)
           .Case("loongarch64", Triple::loongarch64)
           .Cases({"dxil", "dxilv1.0", "dxilv1.1", "dxilv1.2", "dxilv1.3",
@@ -1203,6 +1214,8 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::bpfeb:
   case Triple::bpfel:
   case Triple::csky:
+  case Triple::cpu0:
+  case Triple::cpu0el:
   case Triple::hexagon:
   case Triple::hsail64:
   case Triple::hsail:
@@ -1947,6 +1960,8 @@ unsigned Triple::getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::arm:
   case llvm::Triple::armeb:
   case llvm::Triple::csky:
+  case llvm::Triple::cpu0:
+  case llvm::Triple::cpu0el:
   case llvm::Triple::dxil:
   case llvm::Triple::hexagon:
   case llvm::Triple::hsail:
@@ -2058,6 +2073,8 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::arm:
   case Triple::armeb:
   case Triple::csky:
+  case Triple::cpu0:
+  case Triple::cpu0el:
   case Triple::dxil:
   case Triple::hexagon:
   case Triple::hsail:
@@ -2159,6 +2176,8 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::arc:
   case Triple::avr:
   case Triple::csky:
+  case Triple::cpu0:
+  case Triple::cpu0el:
   case Triple::dxil:
   case Triple::hexagon:
   case Triple::kalimba:
@@ -2349,6 +2368,9 @@ Triple Triple::getBigEndianArchVariant() const {
   case Triple::tcele:
     T.setArch(Triple::tce);
     break;
+  case Triple::cpu0el:
+    T.setArch(Triple::cpu0);
+    break;
   default:
     llvm_unreachable("getBigEndianArchVariant: unknown triple.");
   }
@@ -2404,6 +2426,9 @@ Triple Triple::getLittleEndianArchVariant() const {
   case Triple::tce:
     T.setArch(Triple::tcele);
     break;
+  case Triple::cpu0:
+    T.setArch(Triple::cpu0el);
+    break;
   default:
     llvm_unreachable("getLittleEndianArchVariant: unknown triple.");
   }
@@ -2421,6 +2446,7 @@ bool Triple::isLittleEndian() const {
   case Triple::avr:
   case Triple::bpfel:
   case Triple::csky:
+  case Triple::cpu0el:
   case Triple::dxil:
   case Triple::hexagon:
   case Triple::hsail64:
@@ -2683,6 +2709,8 @@ ExceptionHandling Triple::getDefaultExceptionHandling() const {
   switch (getArch()) {
   case Triple::arc:
   case Triple::csky:
+  case Triple::cpu0:
+  case Triple::cpu0el:
   case Triple::hexagon:
   case Triple::lanai:
   case Triple::m68k:

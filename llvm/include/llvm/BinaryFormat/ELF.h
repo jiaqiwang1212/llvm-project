@@ -325,6 +325,7 @@ enum {
   EM_VE = 251,            // NEC SX-Aurora VE
   EM_CSKY = 252,          // C-SKY 32-bit processor
   EM_LOONGARCH = 258,     // LoongArch
+  EM_CPU0      = 999,     // Cpu0 tutorial backend (non-standard; value may collide if a real arch is registered here)
 };
 
 // Object file classes.
@@ -1056,6 +1057,11 @@ enum : unsigned {
 // ELF Relocation types for CSKY
 enum {
 #include "ELFRelocs/CSKY.def"
+};
+
+// ELF Relocation types for Cpu0
+enum {
+#include "ELFRelocs/Cpu0.def"
 };
 
 // LoongArch Specific e_flags
