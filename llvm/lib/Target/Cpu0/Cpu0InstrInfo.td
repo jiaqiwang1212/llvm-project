@@ -18,7 +18,7 @@
 def SDT_Cpu0Ret          : SDTypeProfile<0, 1, [SDTCisInt<0>]>;
 
 // Return
-def Cpu0Ret : SDNode<"Cpu0ISD::Ret", SDTNone,
+def Cpu0Ret : SDNode<"Cpu0ISD::Ret", SDT_Cpu0Ret,
                      [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
 //===----------------------------------------------------------------------===//
@@ -216,6 +216,8 @@ def ADDiu   : ArithLogicI<0x09, "addiu", add, simm16, immSExt16, CPURegs>;
 def JR      : JumpFR<0x3c, "jr", GPROut>;
 
 def RET     : RetBase<GPROut>;
+
+def : Pat<(Cpu0Ret GPROut:$ra), (RET GPROut:$ra)>;
 
 /// No operation
 let addr=0 in

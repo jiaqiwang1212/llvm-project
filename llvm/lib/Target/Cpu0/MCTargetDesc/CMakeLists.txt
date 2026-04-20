@@ -6,6 +6,7 @@ add_llvm_component_library(LLVMCpu0Desc
   LINK_COMPONENTS
   MC
   Cpu0Info
+  Cpu0AsmPrinter
   Support
 
   ADD_TO_COMPONENT

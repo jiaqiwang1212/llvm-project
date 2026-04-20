@@ -35,8 +35,17 @@ void Cpu0DAGToDAGISel::Select(SDNode *Node) {
 StringRef Cpu0DAGToDAGISel::getPassName() const { return PASS_NAME; }
 
 bool Cpu0DAGToDAGISel::SelectAddr(SDValue N, SDValue &Base, SDValue &Offset) {
+  EVT ValTy = N.getValueType();
+  SDLoc DL(N);
+
+  if (FrameIndexSDNode *FI = dyn_cast<FrameIndexSDNode>(N)) {
+    Base = CurDAG->getTargetFrameIndex(FI->getIndex(), ValTy);
+    Offset = CurDAG->getTargetConstant(0, DL, ValTy);
+    return true;
+  }
+
   Base = N;
-  Offset = CurDAG->getTargetConstant(0, SDLoc(N), N.getValueType());
+  Offset = CurDAG->getTargetConstant(0, DL, ValTy);
   return true;
 }
 

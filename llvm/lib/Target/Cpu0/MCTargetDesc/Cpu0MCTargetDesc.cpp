@@ -12,8 +12,10 @@
 
 #include "Cpu0MCAsmInfo.h"
 #include "Cpu0MCTargetDesc.h"
+#include "InstPrinter/Cpu0InstPrinter.h"
 #include "TargetInfo/Cpu0TargetInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCInstPrinter.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -57,11 +59,20 @@ static MCAsmInfo *createCpu0MCAsmInfo(const MCRegisterInfo &MRI,
   return new Cpu0MCAsmInfo(TT);
 }
 
+static MCInstPrinter *createCpu0MCInstPrinter(const Triple &T,
+                                              unsigned SyntaxVariant,
+                                              const MCAsmInfo &MAI,
+                                              const MCInstrInfo &MII,
+                                              const MCRegisterInfo &MRI) {
+  return new Cpu0InstPrinter(MAI, MII, MRI);
+}
+
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeCpu0TargetMC() {
   for (Target *T : {&getTheCpu0Target(), &getTheCpu0elTarget()}) {
     TargetRegistry::RegisterMCAsmInfo(*T, createCpu0MCAsmInfo);
     TargetRegistry::RegisterMCInstrInfo(*T, createCpu0MCInstrInfo);
     TargetRegistry::RegisterMCRegInfo(*T, createCpu0MCRegisterInfo);
     TargetRegistry::RegisterMCSubtargetInfo(*T, createCpu0MCSubtargetInfo);
+    TargetRegistry::RegisterMCInstPrinter(*T, createCpu0MCInstPrinter);
   }
 }

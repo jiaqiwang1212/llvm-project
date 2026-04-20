@@ -10,19 +10,25 @@
 #define LLVM_LIB_TARGET_CPU0_CPU0MACHINEFUNCTION_H
 
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/IR/Function.h"
 
 namespace llvm {
 
 class Cpu0FunctionInfo : public MachineFunctionInfo {
   int VarArgsFrameIndex = 0;
+  bool EmitNOAT = false;
 
   virtual void anchor();
 
 public:
-  explicit Cpu0FunctionInfo(MachineFunction &MF) {}
+  explicit Cpu0FunctionInfo(const Function &F, const TargetSubtargetInfo *STI) {}
 
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
   void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+
+  bool getEmitNOAT() const { return EmitNOAT; }
+  void setEmitNOAT() { EmitNOAT = true; }
 };
 
 } // namespace llvm

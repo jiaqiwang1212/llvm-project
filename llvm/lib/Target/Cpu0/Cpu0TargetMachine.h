@@ -41,6 +41,10 @@ public:
     return TLOF.get();
   }
 
+  MachineFunctionInfo *
+  createMachineFunctionInfo(BumpPtrAllocator &Allocator, const Function &F,
+                            const TargetSubtargetInfo *STI) const override;
+
   const Cpu0ABIInfo &getABI() const { return ABI; }
 };
 

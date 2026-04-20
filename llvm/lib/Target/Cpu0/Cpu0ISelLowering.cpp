@@ -108,7 +108,6 @@ SDValue Cpu0TargetLowering::LowerReturn(
     assert(VA.isRegLoc() && "Can only return in registers!");
     Chain = DAG.getCopyToReg(Chain, DL, VA.getLocReg(), OutVals[I], Glue);
     Glue = Chain.getValue(1);
-    RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
   RetOps[0] = Chain;

@@ -9,6 +9,7 @@
 #include "Cpu0TargetMachine.h"
 #include "Cpu0.h"
 #include "Cpu0ISelDAGToDAG.h"
+#include "Cpu0MachineFunction.h"
 #include "Cpu0Subtarget.h"
 #include "Cpu0TargetObjectFile.h"
 #include "TargetInfo/Cpu0TargetInfo.h"
@@ -123,4 +124,11 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeCpu0Target() {
   RegisterTargetMachine<Cpu0elTargetMachine> Y(getTheCpu0elTarget());
   PassRegistry *PR = PassRegistry::getPassRegistry();
   initializeCpu0DAGToDAGISelLegacyPass(*PR);
+}
+
+MachineFunctionInfo *
+Cpu0TargetMachine::createMachineFunctionInfo(BumpPtrAllocator &Allocator,
+                                              const Function &F,
+                                              const TargetSubtargetInfo *STI) const {
+  return Cpu0FunctionInfo::create<Cpu0FunctionInfo>(Allocator, F, STI);
 }
