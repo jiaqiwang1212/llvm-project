@@ -17,7 +17,7 @@
 
 namespace llvm {
 
-class Cpu0TargetMachine : public CodeGenTargetMachineImpl {
+class Cpu0TargetMachine : public CodeGenTargetMachineImpl {  // 使用半成品的框架
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   Cpu0ABIInfo ABI;
   Cpu0Subtarget DefaultSubtarget;
@@ -46,6 +46,7 @@ public:
                             const TargetSubtargetInfo *STI) const override;
 
   const Cpu0ABIInfo &getABI() const { return ABI; }
+  bool isLittleEndian() const { return DefaultSubtarget.isLittle(); }
 };
 
 class Cpu0ebTargetMachine : public Cpu0TargetMachine {

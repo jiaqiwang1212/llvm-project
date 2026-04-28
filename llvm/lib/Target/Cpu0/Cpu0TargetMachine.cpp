@@ -87,6 +87,10 @@ public:
     return getTM<Cpu0TargetMachine>();
   }
 
+  const Cpu0Subtarget &getCpu0Subtarget() const {
+    return *getCpu0TargetMachine().getSubtargetImpl();
+  }
+
   bool addInstSelector() override;
 };
 
