@@ -50,6 +50,10 @@ let Namespace = "Cpu0" in {
 
   def PC   : Cpu0C0Reg<0, "pc">,  DwarfRegNum<[20]>;
   def EPC  : Cpu0C0Reg<1, "epc">, DwarfRegNum<[21]>;
+
+  // HI/LO registers for multiply/divide results
+  def HI   : Cpu0Reg<0, "hi">, DwarfRegNum<[18]>;
+  def LO   : Cpu0Reg<1, "lo">, DwarfRegNum<[19]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -74,3 +78,6 @@ def SR     : RegisterClass<"Cpu0", [i32], 32, (add SW)>;
 
 //@Co-processor 0 Registers class
 def C0Regs : RegisterClass<"Cpu0", [i32], 32, (add PC, EPC)>;
+
+// HI/LO register class for multiply/divide results
+def HILO   : RegisterClass<"Cpu0", [i32], 32, (add HI, LO)>;

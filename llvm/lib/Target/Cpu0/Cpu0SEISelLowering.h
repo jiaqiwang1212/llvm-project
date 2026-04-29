@@ -18,6 +18,8 @@ class Cpu0SETargetLowering : public Cpu0TargetLowering {
 public:
   explicit Cpu0SETargetLowering(const Cpu0TargetMachine &TM,
                                 const Cpu0Subtarget &STI);
+
+  SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 };
 
 } // namespace llvm

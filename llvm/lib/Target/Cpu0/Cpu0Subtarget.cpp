@@ -13,7 +13,12 @@
 #include "Cpu0RegisterInfo.h"
 #include "Cpu0TargetMachine.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
+
+static llvm::cl::opt<bool> EnableOverflowOpt(
+    "cpu0-enable-overflow", llvm::cl::Hidden, llvm::cl::init(false),
+    llvm::cl::desc("Use ADD/SUB instead of ADDu/SUBu for signed overflow trapping"));
 
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
@@ -62,6 +67,8 @@ Cpu0Subtarget &Cpu0Subtarget::initializeSubtargetDependencies(
     HasCmp = false;
     HasSlt = true;
   }
+
+  EnableOverflow = EnableOverflowOpt;
 
   ParseSubtargetFeatures(CPU, /*TuneCPU=*/CPU, FS);
   InstrItins = getInstrItineraryForCPU(CPU);

@@ -34,6 +34,9 @@ public:
 
   bool SelectAddr(SDValue N, SDValue &Base, SDValue &Offset);
 
+  void selectMULT(SDNode *N, unsigned Opc, const SDLoc &DL, EVT Ty,
+                  bool HasHi, bool HasLo);
+
 private:
 #include "Cpu0GenDAGISel.inc"
 };

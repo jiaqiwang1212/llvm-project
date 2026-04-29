@@ -20,6 +20,44 @@ Cpu0SEInstrInfo::Cpu0SEInstrInfo(const Cpu0Subtarget &STI,
 
 const Cpu0RegisterInfo &Cpu0SEInstrInfo::getRegisterInfo() const { return RI; }
 
+void Cpu0SEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
+                                   MachineBasicBlock::iterator I,
+                                   const DebugLoc &DL,
+                                   Register DestReg, Register SrcReg,
+                                   bool KillSrc, bool RenamableDest,
+                                   bool RenamableSrc) const {
+  unsigned Opc = 0;
+
+  if (Cpu0::GPROutRegClass.contains(DestReg)) {
+    if (Cpu0::GPROutRegClass.contains(SrcReg))
+      Opc = Cpu0::ADDu;   // GPR -> GPR: ADDu dst, ZERO, src
+    else if (SrcReg == Cpu0::HI)
+      Opc = Cpu0::MFHI;
+    else if (SrcReg == Cpu0::LO)
+      Opc = Cpu0::MFLO;
+  } else if (DestReg == Cpu0::HI) {
+    if (Cpu0::GPROutRegClass.contains(SrcReg))
+      Opc = Cpu0::MTHI;
+  } else if (DestReg == Cpu0::LO) {
+    if (Cpu0::GPROutRegClass.contains(SrcReg))
+      Opc = Cpu0::MTLO;
+  }
+
+  assert(Opc && "Cannot copy registers");
+
+  MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(Opc));
+  if (Opc == Cpu0::ADDu) {
+    MIB.addReg(DestReg, RegState::Define)
+       .addReg(Cpu0::ZERO)
+       .addReg(SrcReg, getKillRegState(KillSrc));
+  } else if (Opc == Cpu0::MFHI || Opc == Cpu0::MFLO) {
+    MIB.addReg(DestReg, RegState::Define);
+  } else {
+    // MTHI / MTLO
+    MIB.addReg(SrcReg, getKillRegState(KillSrc));
+  }
+}
+
 void Cpu0SEInstrInfo::storeRegToStackSlot(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator I, Register SrcReg,
     bool IsKill, int FI, const TargetRegisterClass *RC, Register VReg,

@@ -22,6 +22,9 @@ def II_CLZ             : InstrItinClass;
 def IILoad             : InstrItinClass;
 def IIStore            : InstrItinClass;
 def IIBranch           : InstrItinClass;
+def IIHiLo             : InstrItinClass;
+def IImul              : InstrItinClass;
+def IIIdiv             : InstrItinClass;
 
 def IIPseudo           : InstrItinClass;
 
@@ -34,5 +37,8 @@ def Cpu0GenericItineraries : ProcessorItineraries<[ALU, IMULDIV], [], [
   InstrItinData<II_CLZ             , [InstrStage<1,  [ALU]>]>,
   InstrItinData<IILoad             , [InstrStage<3,  [ALU]>]>,
   InstrItinData<IIStore            , [InstrStage<1,  [ALU]>]>,
-  InstrItinData<IIBranch           , [InstrStage<1,  [ALU]>]>
+  InstrItinData<IIBranch           , [InstrStage<1,  [ALU]>]>,
+  InstrItinData<IIHiLo             , [InstrStage<1,  [IMULDIV]>]>,
+  InstrItinData<IImul              , [InstrStage<17, [IMULDIV]>]>,
+  InstrItinData<IIIdiv             , [InstrStage<38, [IMULDIV]>]>
 ]>;

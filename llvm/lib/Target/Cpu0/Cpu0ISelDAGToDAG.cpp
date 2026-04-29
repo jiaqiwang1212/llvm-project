@@ -23,12 +23,44 @@ bool Cpu0DAGToDAGISel::runOnMachineFunction(MachineFunction &MF) {
   return SelectionDAGISel::runOnMachineFunction(MF);
 }
 
+void Cpu0DAGToDAGISel::selectMULT(SDNode *N, unsigned Opc, const SDLoc &DL,
+                                    EVT Ty, bool HasHi, bool HasLo) {
+  SDNode *Mul = CurDAG->getMachineNode(Opc, DL, MVT::Glue,
+                                        N->getOperand(0), N->getOperand(1));
+  SDValue InGlue = SDValue(Mul, 0);
+
+  if (HasHi) {
+    SDNode *Hi = CurDAG->getMachineNode(Cpu0::MFHI, DL, Ty, MVT::Glue, InGlue);
+    InGlue = SDValue(Hi, 1);
+    ReplaceNode(N, Hi);
+  }
+  if (HasLo) {
+    SDNode *Lo = CurDAG->getMachineNode(Cpu0::MFLO, DL, Ty, MVT::Glue, InGlue);
+    ReplaceNode(N, Lo);
+  }
+}
+
 void Cpu0DAGToDAGISel::Select(SDNode *Node) {
+  unsigned Opcode = Node->getOpcode();
+  SDLoc DL(Node);
+
   if (Node->isMachineOpcode()) {
     LLVM_DEBUG(dbgs() << "== "; Node->dump(CurDAG); dbgs() << "\n");
     Node->setNodeId(-1);
     return;
   }
+
+  switch (Opcode) {
+  default:
+    break;
+  case ISD::MULHS:
+    selectMULT(Node, Cpu0::MULT,  DL, MVT::i32, /*HasHi=*/true, /*HasLo=*/false);
+    return;
+  case ISD::MULHU:
+    selectMULT(Node, Cpu0::MULTu, DL, MVT::i32, /*HasHi=*/true, /*HasLo=*/false);
+    return;
+  }
+
   SelectCode(Node);
 }
 

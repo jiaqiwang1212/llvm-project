@@ -74,6 +74,11 @@ public:
   bool disableOverflow() const { return !EnableOverflow; }
   bool hasCmp() const { return HasCmp; }
   bool hasSlt() const { return HasSlt; }
+
+  // Chapter feature accessors. All chapter SubtargetFeatures in Cpu0.td write
+  // to HasChapterDummy, so every accessor reads the same backing field.
+  bool hasChapter3_5() const { return HasChapterDummy; }
+  bool hasChapter4_1() const { return HasChapterDummy; }
   bool abiUsesSoftFloat() const { return true; }
   bool enableLongBranchPass() const { return hasCpu032II(); }
   unsigned stackAlignment() const { return 8; }
