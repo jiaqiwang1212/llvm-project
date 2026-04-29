@@ -1059,6 +1059,13 @@ enum {
 #include "ELFRelocs/CSKY.def"
 };
 
+// Cpu0 Specific e_flags
+enum {
+  EF_CPU0_NOREORDER = 0x00000001, // Don't reorder instructions
+  EF_CPU0_PIC       = 0x00000002, // Position independent code
+  EF_CPU0_ARCH_32   = 0x50000000, // CPU032 instruction set per linux not elf.h
+  EF_CPU0_ARCH      = 0xf0000000  // Mask for applying EF_CPU0_ARCH_ variant
+};
 // ELF Relocation types for Cpu0
 enum {
 #include "ELFRelocs/Cpu0.def"
