@@ -39,6 +39,11 @@ static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {
   return RM.value_or(Reloc::Static);
 }
 
+static bool isCpu0CPU(StringRef CPU) {
+  return CPU.empty() || CPU == "generic" || CPU == "cpu032I" ||
+         CPU == "cpu032II";
+}
+
 Cpu0TargetMachine::Cpu0TargetMachine(const Target &T, const Triple &TT,
                                      StringRef CPU, StringRef FS,
                                      const TargetOptions &Options,
@@ -62,8 +67,12 @@ Cpu0TargetMachine::getSubtargetImpl(const Function &F) const {
   Attribute CPUAttr = F.getFnAttribute("target-cpu");
   Attribute FSAttr = F.getFnAttribute("target-features");
 
-  std::string CPU =
-      CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
+  std::string CPU = TargetCPU;
+  if (CPUAttr.isValid()) {
+    StringRef FnCPU = CPUAttr.getValueAsString();
+    if (isCpu0CPU(FnCPU))
+      CPU = FnCPU.str();
+  }
   std::string FS =
       FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
 

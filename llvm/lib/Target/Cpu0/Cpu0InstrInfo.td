@@ -86,9 +86,8 @@ include "Cpu0InstrFormats.td"
 //===----------------------------------------------------------------------===//
 // Cpu0 Operand, Complex Patterns and Transformations Definitions.
 //===----------------------------------------------------------------------===//
-// Instruction operand types
 
-// Signed Operand
+// Signed 16-bit immediate operand.
 def simm16      : Operand<i32> {
   let DecoderMethod= "DecodeSimm16";
 }
@@ -100,8 +99,17 @@ def mem : Operand<iPTR> {
   let EncoderMethod = "getMemEncoding";
 }
 
+// Unsigned 16-bit immediate operand.
+def uimm16 : Operand<i32> {
+  let DecoderMethod = "DecodeSimm16";
+}
+
+// Unsigned 5-bit shift amount operand (for encoding).
+def uimm5 : Operand<i32> {
+  let DecoderMethod = "DecodeSimm16";
+}
+
 // Node immediate fits as 16-bit sign extended on target immediate.
-// e.g. addi, andi
 def immSExt16  : PatLeaf<(imm), [{ return isInt<16>(N->getSExtValue()); }]>;
 
 // Immediate whose low 16 bits are zero (upper-half load pattern for LUi).
@@ -113,17 +121,7 @@ def immLow16Zero : PatLeaf<(imm), [{
 // Zero-extended 16-bit immediate (matches 0..65535).
 def immZExt16  : PatLeaf<(imm), [{ return isUInt<16>(N->getZExtValue()); }]>;
 
-// Unsigned 16-bit immediate operand.
-def uimm16 : Operand<i32> {
-  let DecoderMethod = "DecodeSimm16";
-}
-
-// Unsigned 5-bit shift amount operand (for encoding).
-def uimm5 : Operand<i32> {
-  let DecoderMethod = "DecodeSimm16";
-}
-
-// PatLeaf matching a 5-bit unsigned shift amount (for pattern matching).
+// PatLeaf matching a 5-bit unsigned shift amount.
 def immZExt5 : PatLeaf<(imm), [{ return isUInt<5>(N->getZExtValue()); }]>;
 
 // Extract upper/lower 16 bits from a 32-bit immediate constant.
@@ -137,8 +135,7 @@ def LO16 : SDNodeXForm<imm, [{
                                     SDLoc(N), MVT::i32);
 }]>;
 
-// Cpu0 Address Mode! SDNode frameindex could possibly be a match
-// since load and store instructions from stack used it.
+// Cpu0 Address Mode: SDNode frameindex can match since stack loads/stores use it.
 def addr :
   ComplexPattern<iPTR, 2, "SelectAddr", [frameindex]>;
 
@@ -158,15 +155,14 @@ class AlignedStore<PatFrag Node> :
   return SD->getMemoryVT().getSizeInBits()/8 <= SD->getAlign().value();
 }]>;
 
-// Load/Store PatFrags.
-def load_a          : AlignedLoad<load>;
-def store_a         : AlignedStore<store>;
+def load_a  : AlignedLoad<load>;
+def store_a : AlignedStore<store>;
 
 //===----------------------------------------------------------------------===//
-// Instructions specific format
+// Instruction class templates
 //===----------------------------------------------------------------------===//
 
-// Arithmetic and logical instructions with 2 register operands.
+// Arithmetic/logic immediate (FL format): ra = rb op imm16
 class ArithLogicI<bits<8> op, string instr_asm, SDNode OpNode,
                   Operand Od, PatLeaf imm_type, RegisterClass RC> :
   FL<op, (outs GPROut:$ra), (ins RC:$rb, Od:$imm16),
@@ -183,7 +179,6 @@ class FMem<bits<8> op, dag outs, dag ins, string asmstr, list<dag> pattern,
   let DecoderMethod = "DecodeMem";
 }
 
-// Memory Load/Store
 let canFoldAsLoad = 1 in
 class LoadM<bits<8> op, string instr_asm, PatFrag OpNode, RegisterClass RC,
             Operand MemOpnd, bit Pseudo>:
@@ -201,17 +196,11 @@ class StoreM<bits<8> op, string instr_asm, PatFrag OpNode, RegisterClass RC,
   let isPseudo = Pseudo;
 }
 
-// 32-bit load.
-class LoadM32<bits<8> op, string instr_asm, PatFrag OpNode,
-                   bit Pseudo = 0>
-  : LoadM<op, instr_asm, OpNode, GPROut, mem, Pseudo> {
-}
+class LoadM32<bits<8> op, string instr_asm, PatFrag OpNode, bit Pseudo = 0>
+  : LoadM<op, instr_asm, OpNode, GPROut, mem, Pseudo>;
 
-// 32-bit store.
-class StoreM32<bits<8> op, string instr_asm, PatFrag OpNode,
-                    bit Pseudo = 0>
-  : StoreM<op, instr_asm, OpNode, GPROut, mem, Pseudo> {
-}
+class StoreM32<bits<8> op, string instr_asm, PatFrag OpNode, bit Pseudo = 0>
+  : StoreM<op, instr_asm, OpNode, GPROut, mem, Pseudo>;
 
 let isBranch=1, isTerminator=1, isBarrier=1, imm16=0, hasDelaySlot = 1,
     isIndirectBranch = 1 in
@@ -222,7 +211,6 @@ class JumpFR<bits<8> op, string instr_asm, RegisterClass RC>:
   let imm16 = 0;
 }
 
-// Return instruction
 class RetBase<RegisterClass RC>: JumpFR<0x3c, "ret", RC> {
   let isReturn = 1;
   let isCodeGenOnly = 1;
@@ -230,7 +218,7 @@ class RetBase<RegisterClass RC>: JumpFR<0x3c, "ret", RC> {
   let hasExtraSrcRegAllocReq = 1;
 }
 
-// 3-operand arithmetic/logic (R-type, FA format)
+// 3-operand arithmetic/logic (R-type, FA format): ra = rb op rc
 class ArithLogicR<bits<8> op, string instr_asm, SDNode OpNode,
                   InstrItinClass itin, RegisterClass RC, bit isComm = 0> :
   FA<op, (outs GPROut:$ra), (ins RC:$rb, RC:$rc),
@@ -240,7 +228,7 @@ class ArithLogicR<bits<8> op, string instr_asm, SDNode OpNode,
   let isCommutable = isComm;
 }
 
-// Shift by immediate (R-type, FA format, rc=0)
+// Shift by immediate (FA format, rc=0)
 class ShiftRotateI<bits<8> op, string instr_asm,
                    SDNode OpNode, PatLeaf imm_type, RegisterClass RC> :
   FA<op, (outs GPROut:$ra), (ins RC:$rb, uimm5:$shamt),
@@ -249,7 +237,7 @@ class ShiftRotateI<bits<8> op, string instr_asm,
   let rc = 0;
 }
 
-// Shift by register (R-type, FA format)
+// Shift by register (FA format)
 class ShiftRotateR<bits<8> op, string instr_asm, SDNode OpNode,
                    RegisterClass RC> :
   FA<op, (outs GPROut:$ra), (ins RC:$rb, RC:$rc),
@@ -258,7 +246,7 @@ class ShiftRotateR<bits<8> op, string instr_asm, SDNode OpNode,
   let shamt = 0;
 }
 
-// Multiply: results go to HI/LO implicitly.
+// Multiply: results stored implicitly in HI/LO.
 class Mult32<bits<8> op, string instr_asm, InstrItinClass itin> :
   FA<op, (outs), (ins CPURegs:$ra, CPURegs:$rb),
      !strconcat(instr_asm, "\t$ra, $rb"), [], itin> {
@@ -268,7 +256,7 @@ class Mult32<bits<8> op, string instr_asm, InstrItinClass itin> :
   let Defs = [HI, LO];
 }
 
-// Divide: results go to HI/LO implicitly; SDNode pattern for isel.
+// Divide: results stored implicitly in HI/LO; SDNode pattern drives isel.
 class Div32<SDNode opNode, bits<8> op, string instr_asm, InstrItinClass itin> :
   FA<op, (outs), (ins CPURegs:$ra, CPURegs:$rb),
      !strconcat(instr_asm, "\t$ra, $rb"),
@@ -278,7 +266,6 @@ class Div32<SDNode opNode, bits<8> op, string instr_asm, InstrItinClass itin> :
   let Defs = [HI, LO];
 }
 
-// Move from HI or LO register
 class MoveFromLOHI<bits<8> op, string instr_asm, RegisterClass RC,
                    list<Register> UseRegs> :
   FA<op, (outs RC:$ra), (ins),
@@ -289,7 +276,6 @@ class MoveFromLOHI<bits<8> op, string instr_asm, RegisterClass RC,
   let Uses = UseRegs;
 }
 
-// Move to HI or LO register
 class MoveToLOHI<bits<8> op, string instr_asm, RegisterClass RC,
                  list<Register> DefRegs> :
   FA<op, (outs), (ins RC:$ra),
@@ -307,7 +293,6 @@ class MoveToC0<bits<8> op, string instr_asm, RegisterClass RC> :
   let shamt = 0;
 }
 
-// Move from C0 register
 class MoveFromC0<bits<8> op, string instr_asm, RegisterClass RC> :
   FA<op, (outs RC:$ra), (ins C0Regs:$rb),
      !strconcat(instr_asm, "\t$ra, $rb"), [], IIAlu> {
@@ -315,7 +300,6 @@ class MoveFromC0<bits<8> op, string instr_asm, RegisterClass RC> :
   let shamt = 0;
 }
 
-// Move between C0 registers
 class C0Move<bits<8> op, string instr_asm> :
   FA<op, (outs C0Regs:$rb), (ins C0Regs:$ra),
      !strconcat(instr_asm, "\t$rb, $ra"), [], IIAlu> {
@@ -323,56 +307,80 @@ class C0Move<bits<8> op, string instr_asm> :
   let shamt = 0;
 }
 
-//===----------------------------------------------------------------------===//
-// Instruction definition
-//===----------------------------------------------------------------------===//
+// Compare instruction — writes result into SW (status word register, SR class).
+// cpu032I variant uses CMP/CMPu; cpu032II uses SLT family instead.
+class CmpInstr<bits<8> op, string instr_asm,
+               InstrItinClass itin, RegisterClass RC, RegisterClass RD,
+               bit isComm = 0> :
+  FA<op, (outs RD:$ra), (ins RC:$rb, RC:$rc),
+     !strconcat(instr_asm, "\t$ra, $rb, $rc"), [], itin> {
+  let shamt = 0;
+  let isCommutable = isComm;
+}
+
+// Logical NOR: ra = ~(rb | rc).  Pattern embeds the not-of-or matching.
+class LogicNOR<bits<8> op, string instr_asm, RegisterClass RC> :
+  FA<op, (outs RC:$ra), (ins RC:$rb, RC:$rc),
+     !strconcat(instr_asm, "\t$ra, $rb, $rc"),
+     [(set RC:$ra, (not (or RC:$rb, RC:$rc)))], IIAlu> {
+  let shamt = 0;
+  let isCommutable = 1;
+}
+
+// SetCC register-register (cpu032II, requires HasSlt predicate).
+class SetCC_R<bits<8> op, string instr_asm, PatFrag cond_op,
+              RegisterClass RC> :
+  FA<op, (outs GPROut:$ra), (ins RC:$rb, RC:$rc),
+     !strconcat(instr_asm, "\t$ra, $rb, $rc"),
+     [(set GPROut:$ra, (cond_op RC:$rb, RC:$rc))], IIAlu>,
+  Requires<[HasSlt]> {
+  let shamt = 0;
+}
+
+// SetCC register-immediate (cpu032II, requires HasSlt predicate).
+class SetCC_I<bits<8> op, string instr_asm, PatFrag cond_op,
+              Operand Od, PatLeaf imm_type, RegisterClass RC> :
+  FL<op, (outs GPROut:$ra), (ins RC:$rb, Od:$imm16),
+     !strconcat(instr_asm, "\t$ra, $rb, $imm16"),
+     [(set GPROut:$ra, (cond_op RC:$rb, imm_type:$imm16))], IIAlu>,
+  Requires<[HasSlt]>;
 
 //===----------------------------------------------------------------------===//
-// Cpu0 Instructions
+// Instruction definitions
 //===----------------------------------------------------------------------===//
 
 /// Load and Store Instructions
-///  aligned
-def LD     : LoadM32<0x01,  "ld",  load_a>;
-def ST     : StoreM32<0x02, "st",  store_a>;
+def LD  : LoadM32<0x01, "ld",  load_a>;
+def ST  : StoreM32<0x02, "st", store_a>;
 
 /// Arithmetic Instructions (ALU Immediate)
-// IR "add" defined in include/llvm/Target/TargetSelectionDAG.td, line 315 (def add).
-def ADDiu   : ArithLogicI<0x09, "addiu", add, simm16, immSExt16, CPURegs>;
+def ADDiu : ArithLogicI<0x09, "addiu", add, simm16, immSExt16, CPURegs>;
 
-let Predicates = [Ch3_5] in {
-def ORi     : ArithLogicI<0x0d, "ori", or, uimm16, immZExt16, CPURegs>;
+let Predicates = [Ch3_5] in
+def ORi   : ArithLogicI<0x0d, "ori",  or,  uimm16, immZExt16, CPURegs>;
+
+let Predicates = [Ch4_2] in {
+def ANDi  : ArithLogicI<0x0c, "andi", and, uimm16, immZExt16, CPURegs>;
+def XORi  : ArithLogicI<0x0e, "xori", xor, uimm16, immZExt16, CPURegs>;
 }
 
 let Predicates = [Ch3_5] in {
 let Predicates = [DisableOverflow] in {
-def ADDu    : ArithLogicR<0x11, "addu", add, IIAlu, GPROut, 1>;
+def ADDu  : ArithLogicR<0x11, "addu", add, IIAlu, GPROut, 1>;
 }
 }
 
-/// Arithmetic Instructions (3-Operand, R-Type)
+/// Arithmetic Instructions (3-Operand R-Type) — Chapter 4.1
 let Predicates = [Ch4_1] in {
 
-// Integer arithmetic (overflow-controlled)
 let Predicates = [DisableOverflow] in {
-def SUBu    : ArithLogicR<0x12, "subu", sub, IIAlu, GPROut>;
+def SUBu  : ArithLogicR<0x12, "subu", sub, IIAlu, GPROut>;
 }
 let Predicates = [EnableOverflow] in {
-def ADD     : ArithLogicR<0x13, "add",  add, IIAlu, GPROut, 1>;
-def SUB     : ArithLogicR<0x14, "sub",  sub, IIAlu, GPROut>;
+def ADD   : ArithLogicR<0x13, "add",  add, IIAlu, GPROut, 1>;
+def SUB   : ArithLogicR<0x14, "sub",  sub, IIAlu, GPROut>;
 }
 def MUL   : ArithLogicR<0x17, "mul",  mul, IImul,  GPROut, 1>;
-
-// Bitwise logic
-def AND   : ArithLogicR<0x18, "and",  and, IIAlu,  GPROut, 1>;
-def OR    : ArithLogicR<0x19, "or",   or,  IIAlu,  GPROut, 1>;
-def XOR   : ArithLogicR<0x1a, "xor",  xor, IIAlu,  GPROut, 1>;
-// NOR has no standard LLVM SDNode; matched via Pat<(not (or ...)), NOR> below.
-let isCommutable = 1 in
-def NOR   : FA<0x1b, (outs GPROut:$ra), (ins GPROut:$rb, GPROut:$rc),
-               "nor\t$ra, $rb, $rc", [], IIAlu> {
-  let shamt = 0;
-}
 
 // Multiply/Divide (results in HI/LO)
 def MULT  : Mult32<0x41, "mult",  IImul>;
@@ -386,42 +394,22 @@ def MFLO  : MoveFromLOHI<0x47, "mflo", GPROut, [LO]>;
 def MTHI  : MoveToLOHI<0x48, "mthi", CPURegs, [HI]>;
 def MTLO  : MoveToLOHI<0x49, "mtlo", CPURegs, [LO]>;
 
-// Set-less-than (cpu032II with HasSlt) — uses PatFrag, not SDNode
-class SetCC_R<bits<8> op, string instr_asm, PatFrag Cond, RegisterClass RC> :
-  FA<op, (outs GPROut:$ra), (ins RC:$rb, RC:$rc),
-     !strconcat(instr_asm, "\t$ra, $rb, $rc"),
-     [(set GPROut:$ra, (Cond RC:$rb, RC:$rc))], IIAlu> {
-  let shamt = 0;
-}
-
-class SetCC_I<bits<8> op, string instr_asm, PatFrag Cond,
-              Operand Od, PatLeaf imm_type, RegisterClass RC> :
-  FL<op, (outs GPROut:$ra), (ins RC:$rb, Od:$imm16),
-     !strconcat(instr_asm, "\t$ra, $rb, $imm16"),
-     [(set GPROut:$ra, (Cond RC:$rb, imm_type:$imm16))], IIAlu>;
-
-let Predicates = [Ch4_1, HasSlt] in {
-  def SLT   : SetCC_R<0x28, "slt",   setlt,  GPROut>;
-  def SLTu  : SetCC_R<0x29, "sltu",  setult, GPROut>;
-  def SLTi  : SetCC_I<0x2a, "slti",  setlt,  simm16, immSExt16, GPROut>;
-  def SLTiu : SetCC_I<0x2b, "sltiu", setult, simm16, immSExt16, GPROut>;
-}
-
-// CMP (cpu032I with HasCmp) — no pattern; lowering handled by ISelLowering
-let Predicates = [Ch4_1, HasCmp] in {
-  def CMP : FA<0x2c, (outs GPROut:$ra), (ins GPROut:$rb, GPROut:$rc),
-               "cmp\t$ra, $rb, $rc", [], IIAlu> {
-    let shamt = 0;
-  }
-}
-
-// C0 register moves
+// C0 register moves (processor control registers)
 def MFC0  : MoveFromC0<0x50, "mfc0", CPURegs>;
 def MTC0  : MoveToC0  <0x51, "mtc0", CPURegs>;
 def C0MOV : C0Move    <0x52, "c0mov">;
 
 } // Predicates = [Ch4_1]
 
+/// Bitwise Logic Instructions — Chapter 4.2
+let Predicates = [Ch4_2] in {
+def AND   : ArithLogicR<0x18, "and", and, IIAlu, GPROut, 1>;
+def OR    : ArithLogicR<0x19, "or",  or,  IIAlu, GPROut, 1>;
+def XOR   : ArithLogicR<0x1a, "xor", xor, IIAlu, GPROut, 1>;
+def NOR   : LogicNOR<0x1b, "nor", GPROut>;
+}
+
+/// Load Upper Immediate
 let Predicates = [Ch3_5] in
 def LUi : FL<0x0f, (outs GPROut:$ra), (ins uimm16:$imm16),
              "lui\t$ra, $imm16", [], IIHiLo> {
@@ -444,15 +432,29 @@ def ROLV : ShiftRotateR<0x24, "rolv", rotl, GPROut>;
 def RORV : ShiftRotateR<0x25, "rorv", rotr, GPROut>;
 } // Predicates = [Ch4_1]
 
-def JR      : JumpFR<0x3c, "jr", GPROut>;
+/// Compare and Set-Less-Than Instructions — Chapter 4.2
+// SLTi/SLTiu/SLT/SLTu are cpu032II variant (HasSlt).
+// CMP/CMPu are cpu032I variant (HasCmp); they write to SW via SR register class.
+let Predicates = [Ch4_2, HasSlt] in {
+def SLTi  : SetCC_I<0x26, "slti",  setlt,  simm16, immSExt16, CPURegs>;
+def SLTiu : SetCC_I<0x27, "sltiu", setult, simm16, immSExt16, CPURegs>;
+def SLT   : SetCC_R<0x28, "slt",   setlt,  CPURegs>;
+def SLTu  : SetCC_R<0x29, "sltu",  setult, CPURegs>;
+}
 
-def RET     : RetBase<GPROut>;
+let Predicates = [Ch4_2, HasCmp] in {
+def CMP   : CmpInstr<0x2A, "cmp",  IIAlu, CPURegs, SR, 0>;
+def CMPu  : CmpInstr<0x2B, "cmpu", IIAlu, CPURegs, SR, 0>;
+}
+
+def JR  : JumpFR<0x3c, "jr", GPROut>;
+def RET : RetBase<GPROut>;
 
 def : Pat<(Cpu0Ret GPROut:$ra), (RET GPROut:$ra)>;
 
 /// No operation
 let addr=0 in
-  def NOP   : FJ<0, (outs), (ins), "nop", [], IIAlu>;
+  def NOP : FJ<0, (outs), (ins), "nop", [], IIAlu>;
 
 //===----------------------------------------------------------------------===//
 //  Arbitrary patterns that map to one or more instructions
@@ -462,14 +464,128 @@ let addr=0 in
 def : Pat<(i32 immSExt16:$in), (ADDiu ZERO, imm:$in)>;
 
 let Predicates = [Ch3_5] in {
-// Zero-extended 16-bit immediate -> ORi ZERO, imm
-def : Pat<(i32 immZExt16:$in), (ORi ZERO, imm:$in)>;
-// Upper-half load: immediate with low 16 bits zero -> LUi
+def : Pat<(i32 immZExt16:$in),   (ORi ZERO, imm:$in)>;
 def : Pat<(i32 immLow16Zero:$in), (LUi (HI16 imm:$in))>;
-// Arbitrary 32-bit immediate -> LUi upper + ORi lower
-def : Pat<(i32 imm:$imm), (ORi (LUi (HI16 imm:$imm)), (LO16 imm:$imm))>;
+def : Pat<(i32 imm:$imm),        (ORi (LUi (HI16 imm:$imm)), (LO16 imm:$imm))>;
 }
 
-// NOR: NOT of OR
-let Predicates = [Ch4_1] in
-def : Pat<(not (or GPROut:$rb, GPROut:$rc)), (NOR GPROut:$rb, GPROut:$rc)>;
+// not(x) = NOR(x, ZERO) — 1's complement of a single register.
+let Predicates = [Ch4_2] in
+def : Pat<(not CPURegs:$in), (NOR CPURegs:$in, ZERO)>;
+
+//===----------------------------------------------------------------------===//
+// setcc patterns — Chapter 4.2
+//===----------------------------------------------------------------------===//
+
+let Predicates = [Ch4_2] in {
+
+// --- CMP variant (cpu032I) ---
+
+// a == b  →  (CMP a, b) bit[1] set, shift right by 1 and AND 1
+multiclass SeteqPatsCmp<RegisterClass RC> {
+  def : Pat<(seteq RC:$lhs, RC:$rhs),
+            (SHR (ANDi (CMP RC:$lhs, RC:$rhs), 2), 1)>;
+  def : Pat<(setne RC:$lhs, RC:$rhs),
+            (XORi (SHR (ANDi (CMP RC:$lhs, RC:$rhs), 2), 1), 1)>;
+}
+
+// a < b  →  (CMP a, b) bit[0] set
+multiclass SetltPatsCmp<RegisterClass RC> {
+  def : Pat<(setlt RC:$lhs, RC:$rhs),
+            (ANDi (CMP RC:$lhs, RC:$rhs), 1)>;
+  def : Pat<(setult RC:$lhs, RC:$rhs),
+            (ANDi (CMPu RC:$lhs, RC:$rhs), 1)>;
+}
+
+// a <= b  ≡  !(b < a)
+multiclass SetlePatsCmp<RegisterClass RC> {
+  def : Pat<(setle RC:$lhs, RC:$rhs),
+            (XORi (ANDi (CMP RC:$rhs, RC:$lhs), 1), 1)>;
+  def : Pat<(setule RC:$lhs, RC:$rhs),
+            (XORi (ANDi (CMPu RC:$rhs, RC:$lhs), 1), 1)>;
+}
+
+// a > b  ≡  b < a
+multiclass SetgtPatsCmp<RegisterClass RC> {
+  def : Pat<(setgt RC:$lhs, RC:$rhs),
+            (ANDi (CMP RC:$rhs, RC:$lhs), 1)>;
+  def : Pat<(setugt RC:$lhs, RC:$rhs),
+            (ANDi (CMPu RC:$rhs, RC:$lhs), 1)>;
+}
+
+// a >= b  ≡  !(a < b)
+multiclass SetgePatsCmp<RegisterClass RC> {
+  def : Pat<(setge RC:$lhs, RC:$rhs),
+            (XORi (ANDi (CMP RC:$lhs, RC:$rhs), 1), 1)>;
+  def : Pat<(setuge RC:$lhs, RC:$rhs),
+            (XORi (ANDi (CMPu RC:$lhs, RC:$rhs), 1), 1)>;
+}
+
+// --- SLT variant (cpu032II) ---
+
+// a == b  →  SLTiu(a XOR b, 1)
+// a != b  →  SLTu(ZERO, a XOR b)
+multiclass SeteqPatsSlt<RegisterClass RC, Instruction SLTiuOp,
+                        Instruction XOROp, Instruction SLTuOp,
+                        Register ZEROReg> {
+  def : Pat<(seteq RC:$lhs, RC:$rhs),
+            (SLTiuOp (XOROp RC:$lhs, RC:$rhs), 1)>;
+  def : Pat<(setne RC:$lhs, RC:$rhs),
+            (SLTuOp ZEROReg, (XOROp RC:$lhs, RC:$rhs))>;
+}
+
+// a <= b  ≡  !(b < a)
+multiclass SetlePatsSlt<RegisterClass RC,
+                        Instruction SLTOp, Instruction SLTuOp> {
+  def : Pat<(setle RC:$lhs, RC:$rhs),
+            (XORi (SLTOp RC:$rhs, RC:$lhs), 1)>;
+  def : Pat<(setule RC:$lhs, RC:$rhs),
+            (XORi (SLTuOp RC:$rhs, RC:$lhs), 1)>;
+}
+
+// a > b  ≡  b < a
+multiclass SetgtPatsSlt<RegisterClass RC,
+                        Instruction SLTOp, Instruction SLTuOp> {
+  def : Pat<(setgt RC:$lhs, RC:$rhs),
+            (SLTOp RC:$rhs, RC:$lhs)>;
+  def : Pat<(setugt RC:$lhs, RC:$rhs),
+            (SLTuOp RC:$rhs, RC:$lhs)>;
+}
+
+// a >= b  ≡  !(a < b)
+multiclass SetgePatsSlt<RegisterClass RC,
+                        Instruction SLTOp, Instruction SLTuOp> {
+  def : Pat<(setge RC:$lhs, RC:$rhs),
+            (XORi (SLTOp RC:$lhs, RC:$rhs), 1)>;
+  def : Pat<(setuge RC:$lhs, RC:$rhs),
+            (XORi (SLTuOp RC:$lhs, RC:$rhs), 1)>;
+}
+
+// a >= imm  ≡  !(a < imm)
+multiclass SetgeImmPatsSlt<RegisterClass RC,
+                           Instruction SLTiOp, Instruction SLTiuOp> {
+  def : Pat<(setge RC:$lhs, immSExt16:$rhs),
+            (XORi (SLTiOp RC:$lhs, immSExt16:$rhs), 1)>;
+  def : Pat<(setuge RC:$lhs, immSExt16:$rhs),
+            (XORi (SLTiuOp RC:$lhs, immSExt16:$rhs), 1)>;
+}
+
+// Instantiate SLT variant patterns (cpu032II)
+let Predicates = [HasSlt] in {
+defm : SeteqPatsSlt<CPURegs, SLTiu, XOR, SLTu, ZERO>;
+defm : SetlePatsSlt<CPURegs, SLT, SLTu>;
+defm : SetgtPatsSlt<CPURegs, SLT, SLTu>;
+defm : SetgePatsSlt<CPURegs, SLT, SLTu>;
+defm : SetgeImmPatsSlt<CPURegs, SLTi, SLTiu>;
+}
+
+// Instantiate CMP variant patterns (cpu032I)
+let Predicates = [HasCmp] in {
+defm : SeteqPatsCmp<CPURegs>;
+defm : SetltPatsCmp<CPURegs>;
+defm : SetlePatsCmp<CPURegs>;
+defm : SetgtPatsCmp<CPURegs>;
+defm : SetgePatsCmp<CPURegs>;
+}
+
+} // let Predicates = [Ch4_2]

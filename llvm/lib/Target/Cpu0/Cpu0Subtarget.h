@@ -79,6 +79,7 @@ public:
   // to HasChapterDummy, so every accessor reads the same backing field.
   bool hasChapter3_5() const { return HasChapterDummy; }
   bool hasChapter4_1() const { return HasChapterDummy; }
+  bool hasChapter4_2() const { return HasChapterDummy; }
   bool abiUsesSoftFloat() const { return true; }
   bool enableLongBranchPass() const { return hasCpu032II(); }
   unsigned stackAlignment() const { return 8; }

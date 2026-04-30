@@ -64,6 +64,13 @@ Cpu0SETargetLowering::Cpu0SETargetLowering(const Cpu0TargetMachine &TM,
   setOperationAction(ISD::UREM,  MVT::i32, Expand);
   setTargetDAGCombine({ISD::SDIVREM, ISD::UDIVREM});
 
+  // Cpu0 has no sext_inreg; expand to shl/sra pairs.
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,    Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8,    Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16,   Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i32,   Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::Other, Expand);
+
   computeRegisterProperties(Subtarget.getRegisterInfo());
 }
 
