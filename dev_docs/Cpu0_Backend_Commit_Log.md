@@ -29,6 +29,7 @@ Cpu0 backend 开发过程中到底把系统推进到了什么状态、
 | 3.1   | `65e0954bd083`                             | 建立完整 C++ 后端类层次，把 Cpu0 从空壳推进成能跑通最小 codegen 流程的 backend skeleton |
 | 3.2   | `b3335206d25e`                            | 修复三类级联崩溃：`Cpu0ISD::Ret` 无法选择、`FrameIndex` 无法降低、`Cpu0FI` null dereference |
 | 3.3–3.5 | `f6a0a213667d`                          | 实现 prologue/epilogue 栈帧分配、callee-saved 寄存器溢出恢复、subtarget 访问工具方法；章节门控推进至 CH3_5 |
+| 4.1   | `c6862d06a91c`                             | 实现完整算术/逻辑/移位/旋转/乘除指令集，添加 HI/LO 寄存器对，接入 DAG combine 驱动的除法降低，实现 copyPhysReg 和 selectMULT |
 
 这份文件的组织方式是：
 
@@ -54,6 +55,7 @@ Cpu0 backend 开发过程中到底把系统推进到了什么状态、
 | Stage 5 | [3.1 — 完整 C++ 类层次](#stage-5--31targetmachine-结构建立后端-c-类层次) | `65e0954b` | Subtarget / RegisterInfo / InstrInfo / FrameLowering / ISelLowering / MCAsmInfo 骨架 |
 | Stage 6 | [3.2 — AsmPrinter 与函数返回](#stage-6--32asmprinter-与函数返回修复三类级联崩溃) | `b3335206` | 修复 Ret 无法选择、FrameIndex 无法降低、Cpu0FI null dereference |
 | Stage 7 | [3.3–3.5 — 栈帧与寄存器溢出](#stage-7--335栈帧实现寄存器溢出恢复与-subtarget-工具方法) | `f6a0a213` | emitPrologue/Epilogue、storeRegToStackSlot/loadRegFromStackSlot、isLittleEndian() |
+| Stage 8 | [4.1 — 算术指令集](#stage-8--41算术指令集完整-isa-乘除法与-dag-combine) | `c6862d06` | HI/LO 寄存器、算术/逻辑/移位/旋转/乘除指令、DAG combine 除法降低、copyPhysReg、selectMULT |
 
 ---
 
@@ -1301,7 +1303,157 @@ bool isLittleEndian() const { return DefaultSubtarget.isLittle(); }
 
 ---
 
-## 截至 3.5，当前后端状态
+## Stage 8 — 4.1：算术指令集——完整 ISA、乘除法与 DAG Combine
+
+### 对应提交
+
+- Commit: `c6862d06a91c8f85fd910a0fc1691973eb632238`
+- Subject: `Update 4.1`
+- AuthorDate: `2026-04-29 07:52:23 -0400`
+
+这次提交一共改了 12 个文件：
+
+- 11 个功能文件
+- 1 个测试文档（`test/ch4_1_test.md`）
+
+### 这一步做了什么
+
+这一步把 Cpu0 backend 从"只能编译 `return 0`"推进成"能编译完整 C 算术表达式（含乘法、除法、取余）"的真正功能性后端。
+
+| 章节 | 核心改动 | 涉及文件 |
+|---|---|---|
+| 寄存器 | 新增 HI / LO 寄存器和 HILO 寄存器类 | `Cpu0RegisterInfo.td` |
+| 调度 | 新增 IIHiLo / IImul / IIIdiv itinerary，接入 IMULDIV 功能单元 | `Cpu0Schedule.td` |
+| 指令定义 | 新增 ~35 条指令，含算术、逻辑、移位、旋转、乘除、HI/LO 搬移、C0 搬移 | `Cpu0InstrInfo.td` |
+| 立即数合成 | 新增 HI16/LO16 XForm、immLow16Zero/immZExt16/immZExt5 PatLeaf 和 32 位常量 Pat 规则 | `Cpu0InstrInfo.td` |
+| Subtarget | 新增 `EnableOverflowOpt` 命令行选项，控制 ADD/SUB vs ADDu/SUBu | `Cpu0Subtarget.cpp/.h` |
+| 除法降低 | `performDivRemCombine` 将 SDIVREM/UDIVREM 替换为 Cpu0ISD::DivRem + getCopyFromReg | `Cpu0SEISelLowering.cpp/.h` |
+| 乘法选择 | `selectMULT` 手动展开 ISD::MULHS/MULHU → MULT/MULTu + MFHI | `Cpu0ISelDAGToDAG.cpp/.h` |
+| 物理寄存器拷贝 | `copyPhysReg` 处理 GPR↔HI/LO 的各方向拷贝 | `Cpu0SEInstrInfo.cpp/.h` |
+
+---
+
+### 关键设计决策
+
+#### HI/LO 寄存器命名
+
+实现使用 `"hi"`/`"lo"` 作为汇编名称（encoding 0/1），而非教程的 `"ac0"` 双重命名。
+这样在汇编输出中更清晰，与 MIPS 后端的习惯也一致。
+
+#### selectMULT 设计：void 而非 pair 返回
+
+教程版本返回 `std::pair<SDNode*, SDNode*>` 并在 `Select()` 调用方做 `ReplaceNode`。
+实际实现将 `ReplaceNode` 移入 `selectMULT` 内部，返回 void，调用点更简洁。
+参数顺序为 `(HasHi, HasLo)`（教程为 `HasLo, HasHi`）。
+
+#### PerformDAGCombine 放在 SE 子类
+
+教程将 `PerformDAGCombine` 声明在 `Cpu0TargetLowering`（基类）。
+实际实现放在 `Cpu0SETargetLowering`（SE 子类），因为 `setTargetDAGCombine` 注册也在
+SE 子类构造函数里，两者内聚在同一个文件。
+
+#### copyPhysReg：LLVM 20 扩展签名
+
+LLVM 20 在原有 `(MBB, I, DL, DestReg, SrcReg, KillSrc)` 基础上新增了
+`RenamableDest` 和 `RenamableSrc` 两个布尔参数（用于 GlobalISel 互操作）。
+声明时须使用 `Register`（非 `MCRegister`）并带默认值 `false`。
+
+#### setTargetDAGCombine：ArrayRef API
+
+LLVM 20 的 `setTargetDAGCombine` 接受 `ArrayRef<unsigned>`，可用 initializer list
+一次注册多个操作码：`setTargetDAGCombine({ISD::SDIVREM, ISD::UDIVREM})`。
+教程里的两次单独调用在新 API 下仍然合法但冗余。
+
+#### AND/OR/XOR/NOR 以及 SLT/CMP 提前加入
+
+这批指令在教程中属于后续章节，但与 Ch4_1 算术指令在同一 TD 块中定义更自然，
+且它们的 isel pattern 不依赖任何尚未实现的基础设施。
+`NOR` 通过 `Pat<(not (or ...))>` 匹配，`SLT` 系列受 `HasSlt` feature 门控，
+`CMP` 受 `HasCmp` 门控（cpu032I 子目标）。
+
+---
+
+### 这一步修改的 11 个功能文件
+
+| 文件 | 改动摘要 |
+|---|---|
+| `Cpu0RegisterInfo.td` | 新增 HI / LO 寄存器定义（encoding 0/1，名称 "hi"/"lo"）；新增 HILO 寄存器类 |
+| `Cpu0Schedule.td` | 新增 IIHiLo（1 cycle）、IImul（17 cycles）、IIIdiv（38 cycles）三个 itinerary，更新 Cpu0GenericItineraries |
+| `Cpu0InstrInfo.td` | 新增 SDT_Cpu0DivRem / Cpu0DivRem / Cpu0DivRemU SDNode；新增 immLow16Zero / immZExt16 / uimm16 / uimm5 / immZExt5 / HI16 / LO16；新增 ArithLogicR / ShiftRotateI / ShiftRotateR / Mult32 / Div32 / MoveFromLOHI / MoveToLOHI / MoveToC0 / MoveFromC0 / C0Move 指令类；新增 ~35 条指令 def；新增 32 位立即数合成 Pat 规则 |
+| `Cpu0Subtarget.cpp` | 新增 `EnableOverflowOpt` cl::opt；在 `initializeSubtargetDependencies` 中赋值给 `EnableOverflow` |
+| `Cpu0Subtarget.h` | 新增 `hasChapter3_5()` / `hasChapter4_1()` 访问器（均读 HasChapterDummy） |
+| `Cpu0SEISelLowering.cpp` | 新增 `performDivRemCombine` 静态函数；新增 `PerformDAGCombine` 方法；constructor 新增 MULHS/MULHU/SDIV/SREM/UDIV/UREM 操作码动作设置和 DAG combine 注册 |
+| `Cpu0SEISelLowering.h` | 声明 `PerformDAGCombine` override |
+| `Cpu0SEInstrInfo.cpp` | 实现 `copyPhysReg`（GPR↔GPR via ADDu；GPR↔HI/LO via MFHI/MFLO/MTHI/MTLO） |
+| `Cpu0SEInstrInfo.h` | 声明 `copyPhysReg` override（LLVM 20 签名：Register + RenamableDest/Src） |
+| `Cpu0ISelDAGToDAG.cpp` | 实现 `selectMULT`（void 返回，内部调用 ReplaceNode）；在 `Select()` 中处理 ISD::MULHS / ISD::MULHU |
+| `Cpu0ISelDAGToDAG.h` | 声明 `selectMULT` |
+
+---
+
+### 这一步完成后，Cpu0 backend 的状态
+
+| 能力 | 状态 |
+|---|---|
+| HI / LO 寄存器和 HILO 寄存器类 | ✅ |
+| 算术指令（ADDu, SUBu, ADD, SUB, MUL, ADDiu, ORi, LUi） | ✅ |
+| 逻辑指令（AND, OR, XOR, NOR） | ✅ |
+| 移位 / 旋转指令（SHL, SHR, SRA, ROL, ROR + 寄存器版本） | ✅ |
+| 64 位乘法（MULT/MULTu → HI:LO，MFHI/MFLO 提取） | ✅ |
+| 有符号 / 无符号除法（SDIV/UDIV → HI:LO，DAG combine 接入） | ✅ |
+| GPR ↔ HI/LO 物理寄存器拷贝（copyPhysReg） | ✅ |
+| 32 位立即数合成（LUi + ORi 两指令序列） | ✅ |
+| EnableOverflow 命令行选项（ADD/SUB vs ADDu/SUBu） | ✅ |
+| SLT / SLTu / SLTi / SLTiu（cpu032II，HasSlt 门控） | ✅ |
+| CMP（cpu032I，HasCmp 门控） | ✅ |
+| 对象文件输出（`-filetype=obj`） | ❌（Chapter 5） |
+| 全局变量支持 | ❌（Chapter 6） |
+| 控制流语句（if / while / for） | ❌（Chapter 8） |
+| 函数调用完整实现 | ❌（Chapter 9） |
+
+### 用一句话总结
+
+**这一步把 Cpu0 从"只能编译最小返回函数"推进成"能编译完整 C 算术表达式（含乘、除、取余、移位）的功能性后端"，核心是建立 HI/LO 寄存器模型、实现 DAG combine 驱动的除法降低、手动展开 MULHS/MULHU 到 MULT+MFHI，以及补全 copyPhysReg 支持 GPR↔HI/LO 拷贝。**
+
+---
+
+## 截至 4.1，当前后端状态
+
+### 已具备的能力
+
+- LLVM 能识别 `cpu0` / `cpu0el` / `cpu0eb`，知道其 ELF machine id、data layout 和 relocation 命名
+- Cpu0 已进入 LLVM experimental target 列表，三个静态库（Info / Desc / CodeGen）可被正常构建
+- `Subtarget` 聚合了 RegisterInfo、InstrInfo、FrameLowering、ISelLowering 的完整骨架
+- `ISelDAGToDAG` pass 已接入 codegen pipeline，`SelectAddr` 能正确处理 FrameIndex 节点
+- `LowerFormalArguments` / `LowerReturn` 基于调用约定驱动，最小函数能完整走通 codegen
+- `MCAsmInfo` 已注册，MC 层初始化不崩溃
+- `createMachineFunctionInfo` 已实现（LLVM 20 API），`Cpu0FunctionInfo` 在每个函数中保证非 null
+- `emitPrologue` / `emitEpilogue` 已实现，能通过分块 ADDiu 正确分配和释放栈帧
+- `storeRegToStackSlot` / `loadRegFromStackSlot` 已实现，寄存器分配器能溢出/恢复 callee-saved 寄存器
+- 完整算术指令集（算术、逻辑、移位/旋转、乘法、除法）已实现，`llc -march=cpu0` 能编译 C 算术表达式
+- 32 位立即数合成（LUi + ORi）已实现，任意常量可在两条指令内加载
+
+### 还未完成的部分
+
+| 功能 | 对应章节 |
+|------|---------|
+| 对象文件输出（`-filetype=obj`） | Chapter 5 |
+| 全局变量支持 | Chapter 6 |
+| 其他数据类型 | Chapter 7 |
+| 控制流语句 | Chapter 8 |
+| 函数调用完整实现 | Chapter 9 |
+| ELF 完整支持 | Chapter 10 |
+| 汇编器 / 反汇编器 | Chapter 11 |
+| C++ 支持 | Chapter 12 |
+| 大帧最优实现（LUi+ORi+ADDU 替代分块 ADDiu） | 待定 |
+
+### 用一句话总结当前整体状态
+
+**Cpu0 backend 已经具备完整的算术指令集和栈帧管理能力，能用 `llc -march=cpu0` 编译含乘除法的 C 算术函数；接下来的工作是补全对象文件输出、全局变量支持和控制流语句。**
+
+---
+
+## 截至当前后端状态
 
 ### 已具备的能力
 
@@ -1315,12 +1467,21 @@ bool isLittleEndian() const { return DefaultSubtarget.isLittle(); }
 - `emitPrologue` / `emitEpilogue` 已实现，能通过分块 ADDiu 正确分配和释放栈帧
 - `storeRegToStackSlot` / `loadRegFromStackSlot` 已实现，寄存器分配器能溢出/恢复 callee-saved 寄存器
 - `llc -march=cpu0` 对含局部变量的函数能正确生成包含 prologue/epilogue 的汇编
+- HI / LO 寄存器和 HILO 寄存器类已定义，调度 itinerary（IIHiLo / IImul / IIIdiv）已接入
+- 完整算术指令集（ADDu、SUBu、ADD、SUB、MUL、ADDiu 等）和逻辑指令（AND、OR、XOR、NOR）已实现
+- 移位 / 旋转指令（SHL、SHR、SRA、ROL、ROR 及寄存器版本 SHLV 等）已实现
+- 64 位乘法（MULT / MULTu → HI:LO，MFHI / MFLO 提取）已实现
+- 有符号 / 无符号除法（DAG combine 驱动，SDIVREM / UDIVREM → HI:LO）已实现
+- 32 位立即数合成（LUi + ORi 两指令序列）已实现
+- GPR ↔ HI/LO 物理寄存器拷贝（`copyPhysReg`）已实现
+- `EnableOverflow` 命令行选项已接入，可在 ADD/SUB（有溢出检测）与 ADDu/SUBu 间切换
 
 ### 还未完成的部分
 
 | 功能 | 对应章节 |
 |------|---------|
-| 完整 ISA（算术、Load/Store、分支、函数调用） | Chapter 4 |
+| Load / Store 指令 | Chapter 4.x |
+| 分支与跳转指令 | Chapter 4.x |
 | 对象文件输出（`-filetype=obj`） | Chapter 5 |
 | 全局变量支持 | Chapter 6 |
 | 其他数据类型 | Chapter 7 |
@@ -1333,4 +1494,4 @@ bool isLittleEndian() const { return DefaultSubtarget.isLittle(); }
 
 ### 用一句话总结当前整体状态
 
-**Cpu0 backend 已经具备完整的栈帧管理和 callee-saved 寄存器溢出恢复能力，是一个可以编译含局部变量函数的功能性 skeleton；接下来的工作是逐章填充完整 ISA、对象文件输出和更复杂的 ABI 支持。**
+**Cpu0 backend 已经具备完整的栈帧管理、callee-saved 寄存器溢出恢复和完整算术指令集，能用 `llc -march=cpu0` 编译含乘除法的 C 算术函数；接下来的工作是补全 Load/Store、分支跳转、对象文件输出和更复杂的 ABI 支持。**
