@@ -13,10 +13,33 @@
 #ifndef LLVM_LIB_TARGET_CPU0_MCTARGETDESC_CPU0MCTARGETDESC_H
 #define LLVM_LIB_TARGET_CPU0_MCTARGETDESC_CPU0MCTARGETDESC_H
 
-#include "llvm/Support/DataTypes.h"
+#include <memory>
 
 namespace llvm {
+class MCAsmBackend;
+class MCCodeEmitter;
+class MCContext;
+class MCInstrInfo;
+class MCObjectTargetWriter;
+class MCRegisterInfo;
+class MCSubtargetInfo;
+class MCTargetOptions;
 class Target;
+class Triple;
+
+MCCodeEmitter *createCpu0MCCodeEmitterEB(const MCInstrInfo &MCII,
+                                         MCContext &Ctx);
+MCCodeEmitter *createCpu0MCCodeEmitterEL(const MCInstrInfo &MCII,
+                                         MCContext &Ctx);
+
+MCAsmBackend *createCpu0AsmBackend(const Target &T,
+                                   const MCSubtargetInfo &STI,
+                                   const MCRegisterInfo &MRI,
+                                   const MCTargetOptions &Options);
+
+std::unique_ptr<MCObjectTargetWriter>
+createCpu0ELFObjectWriter(const Triple &TT);
+
 } // end namespace llvm
 
 // Defines symbolic names for Cpu0 registers.

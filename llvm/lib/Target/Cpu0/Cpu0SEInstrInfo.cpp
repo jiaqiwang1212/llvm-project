@@ -7,10 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "Cpu0SEInstrInfo.h"
+#include "Cpu0AnalyzeImmediate.h"
 #include "Cpu0SERegisterInfo.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace llvm;
 
@@ -91,6 +93,54 @@ void Cpu0SEInstrInfo::loadRegFromStackSlot(
       .addImm(0)
       .addMemOperand(MMO)
       .setMIFlags(Flags);
+}
+
+void Cpu0SEInstrInfo::adjustStackPtr(unsigned SP, int64_t Amount,
+                                     MachineBasicBlock &MBB,
+                                     MachineBasicBlock::iterator I) const {
+  DebugLoc DL = I != MBB.end() ? I->getDebugLoc() : DebugLoc();
+
+  if (isInt<16>(Amount)) {
+    BuildMI(MBB, I, DL, get(Cpu0::ADDiu), SP).addReg(SP).addImm(Amount);
+    return;
+  }
+
+  unsigned Reg = loadImmediate(Amount, MBB, I, DL, nullptr);
+  BuildMI(MBB, I, DL, get(Cpu0::ADDu), SP)
+      .addReg(SP)
+      .addReg(Reg, RegState::Kill);
+}
+
+unsigned Cpu0SEInstrInfo::loadImmediate(int64_t Imm, MachineBasicBlock &MBB,
+                                        MachineBasicBlock::iterator II,
+                                        const DebugLoc &DL,
+                                        unsigned *NewImm) const {
+  Cpu0AnalyzeImmediate AnalyzeImm;
+  bool LastInstrIsADDiu = NewImm;
+
+  const Cpu0AnalyzeImmediate::InstSeq &Seq =
+      AnalyzeImm.Analyze(Imm, /*Size=*/32, LastInstrIsADDiu);
+  Cpu0AnalyzeImmediate::InstSeq::const_iterator Inst = Seq.begin();
+
+  assert(!Seq.empty() && (!LastInstrIsADDiu || Seq.size() > 1));
+
+  if (Inst->Opc == Cpu0::LUi)
+    BuildMI(MBB, II, DL, get(Cpu0::LUi), Cpu0::AT)
+        .addImm(SignExtend64<16>(Inst->ImmOpnd));
+  else
+    BuildMI(MBB, II, DL, get(Inst->Opc), Cpu0::AT)
+        .addReg(Cpu0::ZERO)
+        .addImm(SignExtend64<16>(Inst->ImmOpnd));
+
+  for (++Inst; Inst != Seq.end() - LastInstrIsADDiu; ++Inst)
+    BuildMI(MBB, II, DL, get(Inst->Opc), Cpu0::AT)
+        .addReg(Cpu0::AT)
+        .addImm(SignExtend64<16>(Inst->ImmOpnd));
+
+  if (LastInstrIsADDiu)
+    *NewImm = Inst->ImmOpnd;
+
+  return Cpu0::AT;
 }
 
 const Cpu0InstrInfo *llvm::createCpu0SEInstrInfo(const Cpu0Subtarget &STI,

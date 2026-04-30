@@ -12,15 +12,18 @@
 
 #include "Cpu0MCAsmInfo.h"
 #include "Cpu0MCTargetDesc.h"
+#include "Cpu0TargetStreamer.h"
 #include "InstPrinter/Cpu0InstPrinter.h"
 #include "TargetInfo/Cpu0TargetInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCELFStreamer.h"
 #include "llvm/MC/MCInstPrinter.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/FormattedStream.h"
 #include "llvm/TargetParser/Triple.h"
 
 using namespace llvm;
@@ -67,6 +70,20 @@ static MCInstPrinter *createCpu0MCInstPrinter(const Triple &T,
   return new Cpu0InstPrinter(MAI, MII, MRI);
 }
 
+static MCStreamer *createMCStreamer(const Triple &TT, MCContext &Context,
+                                   std::unique_ptr<MCAsmBackend> &&MAB,
+                                   std::unique_ptr<MCObjectWriter> &&OW,
+                                   std::unique_ptr<MCCodeEmitter> &&Emitter) {
+  return createELFStreamer(Context, std::move(MAB), std::move(OW),
+                           std::move(Emitter));
+}
+
+static MCTargetStreamer *
+createCpu0AsmTargetStreamer(MCStreamer &S, formatted_raw_ostream &OS,
+                            MCInstPrinter *InstPrint) {
+  return new Cpu0TargetAsmStreamer(S, OS);
+}
+
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeCpu0TargetMC() {
   for (Target *T : {&getTheCpu0Target(), &getTheCpu0elTarget()}) {
     TargetRegistry::RegisterMCAsmInfo(*T, createCpu0MCAsmInfo);
@@ -74,5 +91,13 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeCpu0TargetMC() {
     TargetRegistry::RegisterMCRegInfo(*T, createCpu0MCRegisterInfo);
     TargetRegistry::RegisterMCSubtargetInfo(*T, createCpu0MCSubtargetInfo);
     TargetRegistry::RegisterMCInstPrinter(*T, createCpu0MCInstPrinter);
+    TargetRegistry::RegisterELFStreamer(*T, createMCStreamer);
+    TargetRegistry::RegisterAsmTargetStreamer(*T, createCpu0AsmTargetStreamer);
+    TargetRegistry::RegisterMCAsmBackend(*T, createCpu0AsmBackend);
   }
+
+  TargetRegistry::RegisterMCCodeEmitter(getTheCpu0Target(),
+                                        createCpu0MCCodeEmitterEB);
+  TargetRegistry::RegisterMCCodeEmitter(getTheCpu0elTarget(),
+                                        createCpu0MCCodeEmitterEL);
 }

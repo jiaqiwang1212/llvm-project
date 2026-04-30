@@ -23,7 +23,9 @@ class FunctionPass;
 class PassRegistry;
 
 FunctionPass *createCpu0ISelDag(Cpu0TargetMachine &TM, CodeGenOptLevel OL);
+FunctionPass *createCpu0SEISelDag(Cpu0TargetMachine &TM, CodeGenOptLevel OL);
 void initializeCpu0DAGToDAGISelLegacyPass(PassRegistry &);
+void initializeCpu0SEDAGToDAGISelLegacyPass(PassRegistry &);
 } // end namespace llvm
 
 #endif

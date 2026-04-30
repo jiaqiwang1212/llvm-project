@@ -9,6 +9,7 @@
 #include "Cpu0TargetMachine.h"
 #include "Cpu0.h"
 #include "Cpu0ISelDAGToDAG.h"
+#include "Cpu0SEISelDAGToDAG.h"
 #include "Cpu0MachineFunction.h"
 #include "Cpu0Subtarget.h"
 #include "Cpu0TargetObjectFile.h"
@@ -110,7 +111,7 @@ TargetPassConfig *Cpu0TargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 bool Cpu0PassConfig::addInstSelector() {
-  addPass(createCpu0ISelDag(getCpu0TargetMachine(), getOptLevel()));
+  addPass(createCpu0SEISelDag(getCpu0TargetMachine(), getOptLevel()));
   return false;
 }
 
@@ -137,6 +138,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeCpu0Target() {
   RegisterTargetMachine<Cpu0elTargetMachine> Y(getTheCpu0elTarget());
   PassRegistry *PR = PassRegistry::getPassRegistry();
   initializeCpu0DAGToDAGISelLegacyPass(*PR);
+  initializeCpu0SEDAGToDAGISelLegacyPass(*PR);
 }
 
 MachineFunctionInfo *

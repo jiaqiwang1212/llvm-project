@@ -41,6 +41,13 @@ public:
                             Register VReg, unsigned SubReg = 0,
                             MachineInstr::MIFlag Flags =
                                 MachineInstr::NoFlags) const override;
+
+  void adjustStackPtr(unsigned SP, int64_t Amount, MachineBasicBlock &MBB,
+                      MachineBasicBlock::iterator I) const override;
+
+  unsigned loadImmediate(int64_t Imm, MachineBasicBlock &MBB,
+                         MachineBasicBlock::iterator II, const DebugLoc &DL,
+                         unsigned *NewImm) const;
 };
 
 } // namespace llvm

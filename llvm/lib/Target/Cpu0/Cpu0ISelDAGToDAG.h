@@ -21,6 +21,7 @@
 namespace llvm {
 
 class Cpu0DAGToDAGISel : public SelectionDAGISel {
+protected:
   const Cpu0Subtarget *Subtarget = nullptr;
 
 public:
@@ -34,8 +35,8 @@ public:
 
   bool SelectAddr(SDValue N, SDValue &Base, SDValue &Offset);
 
-  void selectMULT(SDNode *N, unsigned Opc, const SDLoc &DL, EVT Ty,
-                  bool HasHi, bool HasLo);
+  virtual bool trySelect(SDNode *Node) { return false; }
+  virtual void processFunctionAfterISel(MachineFunction &MF) {}
 
 private:
 #include "Cpu0GenDAGISel.inc"

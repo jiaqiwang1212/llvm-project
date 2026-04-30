@@ -29,6 +29,10 @@ public:
   virtual const Cpu0RegisterInfo &getRegisterInfo() const = 0;
 
   unsigned GetInstSizeInBytes(const MachineInstr &MI) const;
+
+  virtual void adjustStackPtr(unsigned SP, int64_t Amount,
+                              MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I) const = 0;
 };
 
 const Cpu0InstrInfo *createCpu0SEInstrInfo(const Cpu0Subtarget &STI,
