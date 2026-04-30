@@ -1453,7 +1453,260 @@ LLVM 20 的 `setTargetDAGCombine` 接受 `ArrayRef<unsigned>`，可用 initializ
 
 ---
 
-## 截至当前后端状态
+## Stage 9 — 4.2：逻辑指令与比较指令——setcc 完整实现
+
+### 对应提交
+
+- Commit: `b51a4c6855a825a0161c72fe0c9dca81e172aa28`
+- Subject: `Update 4.2`
+- AuthorDate: `2026-04-30 00:54:37 -0400`
+
+这次提交一共改了 6 个文件：
+
+- 4 个功能文件
+- 1 个开发文档（`dev_docs/Cpu0_Section4_2.md`）
+- 1 个测试文档（`test/ch4_2_test.md`）
+
+### 这一步做了什么
+
+这一步把 Cpu0 backend 从"能编译算术表达式"推进成"能编译包含逻辑运算符和比较运算符（`&`、`|`、`^`、`~`、`!`、`==`、`!=`、`<`、`<=`、`>`、`>=`）的 C 表达式"。
+
+| 章节 | 核心改动 | 涉及文件 |
+|---|---|---|
+| 4.2 | 新增 `CmpInstr`/`LogicNOR`/`SetCC_R`/`SetCC_I` 指令类；AND/OR/XOR/NOR 移至 Ch4_2 门控；新增 ANDi/XORi；SLT/CMP 操作码修正；完整 setcc 多类模式 | `Cpu0InstrInfo.td` |
+| 4.2 | `SIGN_EXTEND_INREG` 扩展为 SHL+SRA 对 | `Cpu0SEISelLowering.cpp` |
+| 4.2 | 新增 `hasChapter4_2()` 访问器 | `Cpu0Subtarget.h` |
+| 4.2 | 新增 `isCpu0CPU()` 辅助函数；`getSubtargetImpl()` 对 per-function CPU 属性做合法性过滤 | `Cpu0TargetMachine.cpp` |
+
+---
+
+### `Cpu0InstrInfo.td` — 新增指令类和 setcc 模式
+
+#### 新增 `CmpInstr` 类（cpu032I，HasCmp）
+
+```tablegen
+class CmpInstr<bits<8> op, string instr_asm,
+               InstrItinClass itin, RegisterClass RC, RegisterClass RD,
+               bit isComm = 0> :
+  FA<op, (outs RD:$ra), (ins RC:$rb, RC:$rc), ...>
+```
+
+与 `ArithLogicR` 的关键区别：输出寄存器类是 `SR`（状态寄存器类），而非 `GPROut`。比较结果写入 SW（状态字）寄存器，而非通用寄存器。类体内没有 DAG 模式，匹配由 setcc 的 `Pat<>` 规则完成。
+
+两条指令定义在 `[Ch4_2, HasCmp]` 门控下：
+
+| 助记符 | 操作码 | 说明 |
+|--------|--------|------|
+| `CMP`  | 0x2A   | 有符号比较，写入 SW/SR |
+| `CMPu` | 0x2B   | 无符号比较，写入 SW/SR |
+
+> **操作码修正**：Ch4_1 原型中 CMP 错误使用了 0x2c → 修正为 **0x2A**；CMPu（0x2B）在 Ch4_1 中完全缺失，本次新增。
+
+#### 新增 `LogicNOR` 类
+
+```tablegen
+class LogicNOR<bits<8> op, string instr_asm, RegisterClass RC> :
+  FA<op, ..., [(set RC:$ra, (not (or RC:$rb, RC:$rc)))], IIAlu>
+```
+
+把 `not (or ...)` DAG 模式直接内联在类体中，TableGen 自动为该 DAG 形状生成匹配规则，无需外部 `Pat<>` 规则。
+
+#### AND/OR/XOR/NOR 从 Ch4_1 移至 Ch4_2
+
+这批寄存器-寄存器逻辑指令在 Ch4_1 原型中提前定义；本次规范对齐到教程章节结构，统一移入 `[Ch4_2]` 门控。
+
+#### 新增立即数逻辑指令 ANDi / XORi
+
+| 助记符 | 操作码 | IR 操作 | 立即数类型 |
+|--------|--------|---------|-----------|
+| `ANDi` | 0x0c   | `and`   | `immZExt16`（uimm16） |
+| `XORi` | 0x0e   | `xor`   | `immZExt16`（uimm16） |
+
+均复用已有的 `ArithLogicI` 模板。`ORi`（0x0d）在 Ch3_5 中已存在，本次不变。
+
+#### SLT 系列操作码修正
+
+Ch4_1 原型中操作码错误：
+
+| 助记符  | Ch4_1 错误操作码 | Ch4_2 修正操作码 |
+|---------|-----------------|-----------------|
+| `SLTi`  | 0x2a            | **0x26**        |
+| `SLTiu` | 0x2b            | **0x27**        |
+
+`SLT`（0x28）和 `SLTu`（0x29）操作码不变，全部移入 `[Ch4_2, HasSlt]` 门控。
+
+#### `not` 模式从 Ch4_1 移至 Ch4_2
+
+```tablegen
+let Predicates = [Ch4_2] in
+def : Pat<(not CPURegs:$in), (NOR CPURegs:$in, ZERO)>;
+```
+
+处理 C 一元 `~` 运算符（按位取反）。移入 Ch4_2 以匹配章节结构。
+
+#### setcc 多类模式
+
+所有模式定义在 `let Predicates = [Ch4_2] in { ... }` 块内。
+
+##### CMP 变体（cpu032I，HasCmp）
+
+CMP 执行后 SW 位布局：
+- Bit 0：负标志（a < b，有符号）
+- Bit 1：零标志（a == b）
+
+| 多类 | 覆盖的 setcc 条件 |
+|------|-----------------|
+| `SeteqPatsCmp` | `seteq`、`setne` |
+| `SetltPatsCmp` | `setlt`、`setult` |
+| `SetlePatsCmp` | `setle`、`setule` |
+| `SetgtPatsCmp` | `setgt`、`setugt` |
+| `SetgePatsCmp` | `setge`、`setuge` |
+
+例子——`a == b`（读零标志 bit1，右移 1 得布尔值）：
+```tablegen
+def : Pat<(seteq RC:$lhs, RC:$rhs),
+          (SHR (ANDi (CMP RC:$lhs, RC:$rhs), 2), 1)>;
+```
+
+例子——`a <= b`（等价于 `!(b < a)`，读负标志 bit0，XOR 取反）：
+```tablegen
+def : Pat<(setle RC:$lhs, RC:$rhs),
+          (XORi (ANDi (CMP RC:$rhs, RC:$lhs), 1), 1)>;
+```
+
+##### SLT 变体（cpu032II，HasSlt）
+
+| 多类 | 覆盖的 setcc 条件 |
+|------|-----------------|
+| `SeteqPatsSlt`    | `seteq`、`setne` |
+| `SetlePatsSlt`    | `setle`、`setule` |
+| `SetgtPatsSlt`    | `setgt`、`setugt` |
+| `SetgePatsSlt`    | `setge`、`setuge` |
+| `SetgeImmPatsSlt` | `setge imm`、`setuge imm` |
+
+例子——`a == b`（通过 XOR+SLTiu 实现）：
+```tablegen
+def : Pat<(seteq RC:$lhs, RC:$rhs),
+          (SLTiu (XOR RC:$lhs, RC:$rhs), 1)>;
+```
+
+`SetgeImmPatsSlt` 专门处理与 16 位有符号立即数的比较，利用 `SLTi`/`SLTiu` 直接指令避免额外的寄存器移动。
+
+---
+
+### `Cpu0SEISelLowering.cpp` — SIGN_EXTEND_INREG 展开
+
+```cpp
+// Cpu0 has no sext_inreg; expand to shl/sra pairs.
+setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,    Expand);
+setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8,    Expand);
+setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16,   Expand);
+setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i32,   Expand);
+setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::Other, Expand);
+```
+
+Cpu0 ISA 没有原生的符号扩展指令。若不注册 `Expand`，LLVM 会试图以单条指令发出 `sext_inreg`，无法匹配任何 Cpu0 模式。设置 `Expand` 后，LLVM 自动把 `SIGN_EXTEND_INREG` 分解为 `SHL + SRA` 指令对。
+
+触发场景：C 中对 `i8`/`i16` 类型的比较或赋值操作，编译器需要把窄整数符号扩展到 32 位再做比较。
+
+---
+
+### `Cpu0Subtarget.h` — hasChapter4_2()
+
+```cpp
+bool hasChapter4_2() const { return HasChapterDummy; }
+```
+
+与 `hasChapter4_1()` 模式完全一致，读取同一个 `HasChapterDummy` 字段。作为章节门控访问器供 pass/lowering 代码使用。
+
+---
+
+### `Cpu0TargetMachine.cpp` — isCpu0CPU() 与 getSubtargetImpl() 修复
+
+#### 新增 `isCpu0CPU()` 辅助函数
+
+```cpp
+static bool isCpu0CPU(StringRef CPU) {
+  return CPU.empty() || CPU == "generic" || CPU == "cpu032I" ||
+         CPU == "cpu032II";
+}
+```
+
+#### `getSubtargetImpl()` per-function CPU 属性过滤
+
+```cpp
+// 旧代码（无条件采用 per-function 属性）：
+std::string CPU =
+    CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
+
+// 新代码（只接受合法的 Cpu0 CPU 名）：
+std::string CPU = TargetCPU;
+if (CPUAttr.isValid()) {
+    StringRef FnCPU = CPUAttr.getValueAsString();
+    if (isCpu0CPU(FnCPU))
+        CPU = FnCPU.str();
+}
+```
+
+原因：LLVM IR 中的 per-function `"target-cpu"` 属性可能携带来自前端（clang targeting mips）的 CPU 字符串（如 `"mips32r2"`），这对 Cpu0 的 `createSubtargetImpl()` 是非法值，会触发断言。新代码在使用该属性前先校验它是否属于 Cpu0 已知 CPU 列表，否则回退到目标机器级别的 `TargetCPU`。
+
+---
+
+### 如何验证这一步的修改
+
+```bash
+# 1. 重新构建
+cmake --build . --target LLVMCpu0CodeGen -- -j$(nproc)
+cmake --build . --target llc -- -j$(nproc)
+
+# 2. 准备测试输入
+cat > /tmp/ch4_2.cpp << 'EOF'
+int test_logic(int a, int b) { return (a & b) | (a ^ b); }
+int test_cmp(int a, int b)   { return (a == b) + (a < b) + (a > b); }
+EOF
+
+# 3. 编译为 LLVM bitcode
+clang -O1 -target mips-unknown-linux-gnu -S -emit-llvm /tmp/ch4_2.cpp -o /tmp/ch4_2.ll
+
+# 4. cpu032I（CMP/CMPu 路径）
+./bin/llc -march=cpu0 -mcpu=cpu032I -relocation-model=pic \
+    -filetype=asm /tmp/ch4_2.ll -o -
+
+# 5. cpu032II（SLT 路径）
+./bin/llc -march=cpu0 -mcpu=cpu032II -relocation-model=pic \
+    -filetype=asm /tmp/ch4_2.ll -o -
+```
+
+cpu032I 输出期望包含 `cmp`、`cmpu`、`andi`、`shr`、`xori` 等指令；
+cpu032II 输出期望包含 `slt`、`sltu`、`sltiu`、`xor`、`xori` 等指令。
+
+---
+
+### 这一步完成后，Cpu0 backend 的状态
+
+| 能力 | 状态 |
+|---|---|
+| AND/OR/XOR/NOR 寄存器-寄存器逻辑指令（Ch4_2 门控） | ✅ |
+| ANDi / XORi 立即数逻辑指令 | ✅ |
+| NOR 通过 `not (or ...)` 模式自动选择 | ✅ |
+| `~x` 通过 `NOR x, ZERO` 实现（`not` Pat） | ✅ |
+| SLT/SLTu/SLTi/SLTiu（cpu032II，操作码修正） | ✅ |
+| CMP/CMPu（cpu032I，操作码修正，CMPu 新增） | ✅ |
+| 完整 setcc（`==`/`!=`/`<`/`<=`/`>`/`>=`，两种子目标路径） | ✅ |
+| `SIGN_EXTEND_INREG` 展开为 SHL+SRA | ✅ |
+| per-function CPU 属性合法性过滤（`isCpu0CPU`） | ✅ |
+| 对象文件输出（`-filetype=obj`） | ❌（Chapter 5） |
+| 全局变量支持 | ❌（Chapter 6） |
+| 控制流语句 | ❌（Chapter 8） |
+| 函数调用完整实现 | ❌（Chapter 9） |
+
+### 用一句话总结
+
+**这一步把 Cpu0 从"能编译算术表达式"推进成"能编译包含完整逻辑运算和比较运算的 C 表达式"，核心是引入 CmpInstr/LogicNOR 新指令类、为两种子目标（cpu032I/II）分别实现完整的 setcc 多类 DAG 模式、修正 SLT/CMP 操作码、以及注册 SIGN_EXTEND_INREG 展开以处理窄整数符号扩展。**
+
+---
+
+## 截至 4.2，当前后端状态
 
 ### 已具备的能力
 
@@ -1468,13 +1721,19 @@ LLVM 20 的 `setTargetDAGCombine` 接受 `ArrayRef<unsigned>`，可用 initializ
 - `storeRegToStackSlot` / `loadRegFromStackSlot` 已实现，寄存器分配器能溢出/恢复 callee-saved 寄存器
 - `llc -march=cpu0` 对含局部变量的函数能正确生成包含 prologue/epilogue 的汇编
 - HI / LO 寄存器和 HILO 寄存器类已定义，调度 itinerary（IIHiLo / IImul / IIIdiv）已接入
-- 完整算术指令集（ADDu、SUBu、ADD、SUB、MUL、ADDiu 等）和逻辑指令（AND、OR、XOR、NOR）已实现
-- 移位 / 旋转指令（SHL、SHR、SRA、ROL、ROR 及寄存器版本 SHLV 等）已实现
+- 完整算术指令集（ADDu、SUBu、ADD、SUB、MUL、ADDiu 等）已实现
+- 移位 / 旋转指令（SHL、SHR、SRA、ROL、ROR 及寄存器版本）已实现
 - 64 位乘法（MULT / MULTu → HI:LO，MFHI / MFLO 提取）已实现
 - 有符号 / 无符号除法（DAG combine 驱动，SDIVREM / UDIVREM → HI:LO）已实现
 - 32 位立即数合成（LUi + ORi 两指令序列）已实现
 - GPR ↔ HI/LO 物理寄存器拷贝（`copyPhysReg`）已实现
 - `EnableOverflow` 命令行选项已接入，可在 ADD/SUB（有溢出检测）与 ADDu/SUBu 间切换
+- 逻辑指令（AND/OR/XOR/NOR 寄存器版；ANDi/ORi/XORi 立即数版）已实现
+- 按位取反（`~x`）通过 `NOR x, ZERO` Pat 匹配
+- SLT/SLTu/SLTi/SLTiu（cpu032II）和 CMP/CMPu（cpu032I）已实现，操作码已修正
+- 完整 setcc 模式（`==`/`!=`/`<`/`<=`/`>`/`>=`）为两种子目标分别实现
+- `SIGN_EXTEND_INREG` 展开为 SHL+SRA，处理窄整数符号扩展
+- per-function `"target-cpu"` 属性经合法性过滤，防止外来 CPU 名触发断言
 
 ### 还未完成的部分
 
@@ -1494,4 +1753,4 @@ LLVM 20 的 `setTargetDAGCombine` 接受 `ArrayRef<unsigned>`，可用 initializ
 
 ### 用一句话总结当前整体状态
 
-**Cpu0 backend 已经具备完整的栈帧管理、callee-saved 寄存器溢出恢复和完整算术指令集，能用 `llc -march=cpu0` 编译含乘除法的 C 算术函数；接下来的工作是补全 Load/Store、分支跳转、对象文件输出和更复杂的 ABI 支持。**
+**Cpu0 backend 已经具备完整的算术/逻辑指令集、setcc 比较支持和栈帧管理能力，能用 `llc -march=cpu0` 编译含乘除法和逻辑比较的 C 表达式；接下来的工作是补全 Load/Store、分支跳转和对象文件输出。**
