@@ -78,6 +78,8 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
     return "mips";
   case mipsel:
     return "mipsel";
+  case cpu0:
+    return "cpu0";
   case msp430:
     return "msp430";
   case nvptx64:
@@ -1242,6 +1244,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
     return Triple::ELF;
 
   case Triple::mipsel:
+  case Triple::cpu0:
     if (T.isOSWindows())
       return Triple::COFF;
     return Triple::ELF;
@@ -1956,6 +1959,7 @@ unsigned Triple::getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::m68k:
   case llvm::Triple::mips:
   case llvm::Triple::mipsel:
+  case llvm::Triple::cpu0:
   case llvm::Triple::nvptx:
   case llvm::Triple::ppc:
   case llvm::Triple::ppcle:
@@ -2066,6 +2070,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::loongarch32:
   case Triple::m68k:
   case Triple::mips:
+  case Triple::cpu0:
   case Triple::mipsel:
   case Triple::nvptx:
   case Triple::ppc:
@@ -2170,7 +2175,8 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::sparcel:
   case Triple::tce:
   case Triple::xcore:
-  case Triple::xtensa:
+  case Triple::xtensa: 
+  case Triple::cpu0:
     T.setArch(UnknownArch);
     break;
 
