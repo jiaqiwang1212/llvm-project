@@ -6,6 +6,7 @@ namespace llvm {
 class Target;
 
 Target &getTheCpu0Target();
+Target &getTheCpu0elTarget();
 
 } // namespace llvm
 

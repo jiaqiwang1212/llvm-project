@@ -208,6 +208,31 @@ static std::string computeMipsDataLayout(const Triple &TT, StringRef ABIName) {
   return Ret;
 }
 
+static std::string computeCpu0DataLayout(const Triple &TT) {
+  std::string Ret;
+  
+  // There are both little and big endian mips.
+  if (TT.isLittleEndian())
+    Ret += "e";
+  else
+    Ret += "E";
+
+  Ret += "-m:m";
+
+  // Pointers are 32 bit on some ABIs.
+  Ret += "-p:32:32";
+
+  // 8 and 16 bit integers only need to have natural alignment, but try to
+  // align them to 32 bits. 64 bit integers have natural alignment.
+  Ret += "-i8:8:32-i16:16:32-i64:64";
+
+  // 32 bit registers are always available and the stack is at least 64 bit
+  // aligned. 
+  Ret += "-n32-S64";
+
+  return Ret;
+}
+
 static std::string computePowerDataLayout(const Triple &T, StringRef ABIName) {
   bool is64Bit = T.isPPC64();
   std::string Ret;
@@ -577,8 +602,10 @@ std::string Triple::computeDataLayout(StringRef ABIName) const {
   case Triple::mipsel:
   case Triple::mips64:
   case Triple::mips64el:
-  case Triple::cpu0:
     return computeMipsDataLayout(*this, ABIName);
+  case Triple::cpu0:
+  case Triple::cpu0el:
+    return computeCpu0DataLayout(*this);
   case Triple::msp430:
     return "e-m:e-p:16:16-i32:16-i64:16-f32:16-f64:16-a:8-n8:16-S16";
   case Triple::ppc:
