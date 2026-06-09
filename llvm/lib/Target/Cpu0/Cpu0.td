@@ -66,8 +66,18 @@ def FeatureCpu032I     : SubtargetFeature<"cpu032I", "Cpu0ArchVersion",
 def FeatureCpu032II    : SubtargetFeature<"cpu032II", "Cpu0ArchVersion",
                                 "Cpu032II", "Cpu032II ISA Support (slt)",
                                 [FeatureCmp, FeatureSlt, FeatureChapterAll]>;
+// InstrItinClass 可以理解为“指令流水线/调度信息的分类标签”。
+def IIAlu    : InstrItinClass;
+def IILoad   : InstrItinClass;
+def IIStore  : InstrItinClass;
+def IIBranch : InstrItinClass;
 
+include "Cpu0RegisterInfo.td"
 
+defm : RemapAllTargetPseudoPointerOperands<CPURegs>;
+
+include "Cpu0InstrInfo.td"
+include "Cpu0CallingConv.td"
 
 //===----------------------------------------------------------------------===//
 // Cpu0 processors supported.
@@ -85,4 +95,8 @@ def : Proc<"cpu032II", [FeatureCpu032II]>;
 // Declare the target
 //===----------------------------------------------------------------------===//
 
-def Cpu0 : Target;
+def Cpu0InstrInfo : InstrInfo;
+
+def Cpu0 : Target {
+  let InstructionSet = Cpu0InstrInfo;
+}

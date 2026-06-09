@@ -23,7 +23,7 @@ Cpu0TargetMachine::Cpu0TargetMachine(const Target &T, const Triple &TT,
           T, TT.computeDataLayout(Options.MCOptions.getABIName()), TT, CPU, FS,
           Options, getEffectiveRelocModel(JIT, RM),
           getEffectiveCodeModel(CM, CodeModel::Small), OL),
-      TLOF(std::make_unique<TargetLoweringObjectFileELF>()),
+      TLOF(std::make_unique<Cpu0TargetObjectFile>()),
       DefaultSubtarget(TT, CPU, FS) {
   initAsmInfo();
 }
@@ -43,6 +43,10 @@ Cpu0elTargetMachine::Cpu0elTargetMachine(const Target &T, const Triple &TT,
                                          std::optional<CodeModel::Model> CM,
                                          CodeGenOptLevel OL, bool JIT)
     : Cpu0TargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, JIT) {}
+
+TargetPassConfig *Cpu0TargetMachine::createPassConfig(PassManagerBase &PM) {
+  return new TargetPassConfig(*this, PM);
+}
 
 // code生成的入口，注册pass，包括指令选择，寄存器分配，sheduler等
 // 这个会注册到llvm的全局TargetMachine中，llvm在生成代码时会根据目标平台选择对应的TargetMachine

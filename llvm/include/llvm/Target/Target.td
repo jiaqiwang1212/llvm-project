@@ -171,9 +171,9 @@ def NoRegAltName : RegAltNameIndex;
 // Register - You should define one instance of this class for each register
 // in the target machine. String n will become the "name" of the register.
 class Register<string n, list<string> altNames = []> {
-  string Namespace = "";
-  string AsmName = n;
-  list<string> AltNames = altNames;
+  string Namespace = "";  // C++命名空间
+  string AsmName = n; // 寄存器的名字
+  list<string> AltNames = altNames;  // 寄存器的别名列表
 
   // Aliases - A list of registers that this register overlaps with. A read or
   // modification of this register can potentially read or modify the aliased
@@ -228,7 +228,7 @@ class Register<string n, list<string> altNames = []> {
   bit CoveredBySubRegs = false;
 
   // HWEncoding - The target specific hardware encoding for this register.
-  bits<16> HWEncoding = 0;
+  bits<16> HWEncoding = 0;  // 寄存器的编码，用于指令编码
 
   bit isArtificial = false;
 

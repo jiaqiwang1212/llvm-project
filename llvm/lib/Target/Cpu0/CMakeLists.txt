@@ -2,12 +2,18 @@ add_llvm_component_group(Cpu0 HAS_JIT)
 
 set(LLVM_TARGET_DEFINITIONS Cpu0.td)
 tablegen(LLVM Cpu0GenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM Cpu0GenInstrInfo.inc -gen-instr-info)
+tablegen(LLVM Cpu0GenRegisterInfo.inc -gen-register-info)
 add_public_tablegen_target(Cpu0CommonTableGenTarget) # 添加这行代码tablegen才会生成文件
 
 add_llvm_target(Cpu0CodeGen
     Cpu0TargetMachine.cpp
     Cpu0TargetObjectFile.cpp
     Cpu0Subtarget.cpp
+    Cpu0InstrInfo.cpp
+    Cpu0RegisterInfo.cpp
+    Cpu0InstrInfo.cpp
+    Cpu0FrameLowering.cpp
 
     LINK_COMPONENTS
     CodeGen
