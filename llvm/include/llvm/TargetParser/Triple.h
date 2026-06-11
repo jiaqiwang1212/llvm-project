@@ -70,6 +70,7 @@ public:
     mips64el,    // MIPS64EL: mips64el, mips64r6el, mipsn32el, mipsn32r6el
     cpu0,        // Cpu0 backend
     cpu0el,      // Cpu0 (little endian) backend
+    h2blb,       // H2blb backend
     msp430,      // MSP430: msp430
     ppc,         // PPC: powerpc
     ppcle,       // PPCLE: powerpc (little endian)

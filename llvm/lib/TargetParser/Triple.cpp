@@ -82,6 +82,8 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
     return "cpu0";
   case cpu0el:
     return "cpu0el";
+  case h2blb:
+    return "h2blb";
   case msp430:
     return "msp430";
   case nvptx64:
@@ -278,6 +280,9 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
   case cpu0:
   case cpu0el:
     return "cpu0";
+
+  case h2blb:
+    return "h2blb";
 
   case hexagon:
     return "hexagon";
@@ -682,6 +687,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
       .Case("mips64el", mips64el)
       .Case("cpu0", cpu0)
       .Case("cpu0el", cpu0el)
+      .Case("h2blb", h2blb)
       .Case("msp430", msp430)
       .Case("ppc64", ppc64)
       .Case("ppc32", ppc)
@@ -843,6 +849,7 @@ Triple::ArchType Triple::parseArch(StringRef ArchName) {
                  Triple::mips64el)
           .Cases({"cpu0","cpu0eb", "cpu0allegrex", "cpu0el"}, Triple::cpu0)
           .Cases({"cpu0el", "cpu0allegrexel"}, Triple::cpu0el)
+          .Case("h2blb", Triple::h2blb)
           .Case("r600", Triple::r600)
           .Case("amdgcn", Triple::amdgcn)
           .Case("riscv32", Triple::riscv32)
@@ -1198,6 +1205,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::thumb:
   case Triple::x86:
   case Triple::x86_64:
+  case Triple::h2blb:
     switch (T.getOS()) {
     case Triple::Win32:
     case Triple::UEFI:
@@ -1953,6 +1961,7 @@ unsigned Triple::getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
 
   case llvm::Triple::avr:
   case llvm::Triple::msp430:
+  case llvm::Triple::h2blb:
     return 16;
 
   case llvm::Triple::aarch64_32:
@@ -2105,6 +2114,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::x86:
   case Triple::xcore:
   case Triple::xtensa:
+  case Triple::h2blb:
     // Already 32-bit.
     break;
 
@@ -2191,6 +2201,7 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::xtensa: 
   case Triple::cpu0:
   case Triple::cpu0el:
+  case Triple::h2blb:
     T.setArch(UnknownArch);
     break;
 
@@ -2336,6 +2347,7 @@ Triple Triple::getBigEndianArchVariant() const {
   // drop any arch suffixes.
   case Triple::arm:
   case Triple::thumb:
+  case Triple::h2blb:
     T.setArch(UnknownArch);
     break;
 
@@ -2478,6 +2490,7 @@ bool Triple::isLittleEndian() const {
   case Triple::x86_64:
   case Triple::xcore:
   case Triple::xtensa:
+  case Triple::h2blb:
     return true;
   default:
     return false;
