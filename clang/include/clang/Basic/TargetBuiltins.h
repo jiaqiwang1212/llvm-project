@@ -472,6 +472,16 @@ namespace clang {
       LastTSBuiltin
     };
   }
+  
+  /// H2BLB builtins
+  namespace H2BLB {
+  enum {
+    LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
+#define BUILTIN(ID, TYPE, ATTRS) BI##ID,
+#include "clang/Basic/BuiltinsH2BLB.def"
+    LastTSBuiltin
+  };
+  } // namespace H2BLB
 
   static constexpr uint64_t LargestBuiltinID = std::max<uint64_t>(
       {ARM::LastTSBuiltin, AArch64::LastTSBuiltin, BPF::LastTSBuiltin,

@@ -678,6 +678,9 @@ std::string Triple::computeDataLayout(StringRef ABIName) const {
     // LLVM data layout.
     return "";
 
+  case Triple::h2blb:
+    return "e-p:16:16:16-n16:32-i32:32:32-i16:16:16-i1:8:8-f32:32:32-v32:32:32";
+
   case Triple::UnknownArch:
     return "";
   }

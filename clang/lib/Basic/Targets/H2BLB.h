@@ -40,6 +40,11 @@ public:
         "f32:32:32-"
         // v32 aligned on 32-bit.
         "v32:32:32");
+    // i64 has no native support; ABI alignment follows the 32-bit integer
+    // alignment, matching LLVM's default of i64:32:64.
+    LongLongAlign = 32;
+    // Pointers are 16-bit; match the p:16:16:16 data layout entry.
+    PointerWidth = PointerAlign = 16;
   }
 
   /// Appends the target-specific \#define values for this
@@ -50,9 +55,7 @@ public:
   /// Return information about target-specific builtins for
   /// the current primary target, and info about which builtins are non-portable
   /// across the current set of primary and secondary targets.
-  llvm::SmallVector<Builtin::InfosShard> getTargetBuiltins() const override {
-    return {};
-  }
+  llvm::SmallVector<Builtin::InfosShard> getTargetBuiltins() const override;
 
   /// Returns the kind of __builtin_va_list type that should be used
   /// with this target.
