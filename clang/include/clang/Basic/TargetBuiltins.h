@@ -477,8 +477,9 @@ namespace clang {
   namespace H2BLB {
   enum {
     LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
-#define BUILTIN(ID, TYPE, ATTRS) BI##ID,
-#include "clang/Basic/BuiltinsH2BLB.def"
+#define GET_BUILTIN_ENUMERATORS
+#include "clang/Basic/BuiltinsH2BLB.inc"
+#undef GET_BUILTIN_ENUMERATORS
     LastTSBuiltin
   };
   } // namespace H2BLB

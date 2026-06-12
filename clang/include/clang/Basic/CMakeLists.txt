@@ -223,6 +223,9 @@ clang_tablegen(arm_cde_builtin_aliases.inc -gen-arm-cde-builtin-aliases
 clang_tablegen(riscv_vector_builtins.inc -gen-riscv-vector-builtins
   SOURCE riscv_vector.td
   TARGET ClangRISCVVectorBuiltins)
+clang_tablegen(BuiltinsH2BLB.inc -gen-clang-builtins
+  SOURCE BuiltinsH2BLB.td
+  TARGET ClangBuiltinsH2BLB)
 clang_tablegen(riscv_vector_builtin_cg.inc -gen-riscv-vector-builtin-codegen
   SOURCE riscv_vector.td
   TARGET ClangRISCVVectorBuiltinCG)
