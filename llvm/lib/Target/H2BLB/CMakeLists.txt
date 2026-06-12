@@ -5,13 +5,21 @@ add_llvm_target(H2BLBCodeGen
   H2BLBSubtarget.cpp
   H2BLBISelLowering.cpp
   H2BLBTargetTransformInfo.cpp
+  H2BLBSimpleConstantPropagation.cpp
 
   LINK_COMPONENTS
   H2BLBDesc
   H2BLBInfo
 
-  Support
   Analysis
+  CodeGen
+  Core
+  MC
+  SelectionDAG
+  Support
+  Target
+  TargetParser
+  TransformUtils
 
   ADD_TO_COMPONENT
   H2BLB

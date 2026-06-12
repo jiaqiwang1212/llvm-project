@@ -9,12 +9,13 @@
 // Implements the info about H2BLB target spec.
 //
 //===----------------------------------------------------------------------===//
-
 #include "H2BLBTargetMachine.h"
+#include "H2BLB.h"
 #include "H2BLBTargetTransformInfo.h"
 #include "TargetInfo/H2BLBTargetInfo.h" // For getTheH2BLBTarget.
 #include "llvm/MC/TargetRegistry.h"     // For RegisterTargetMachine.
-#include "llvm/Support/Compiler.h"      // For LLVM_EXTERNAL_VISIBILITY.
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Support/Compiler.h" // For LLVM_EXTERNAL_VISIBILITY.
 #include <memory>
 
 using namespace llvm;
@@ -22,6 +23,10 @@ using namespace llvm;
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeH2BLBTarget() {
   // Register the target so that external tools can instantiate it.
   RegisterTargetMachine<H2BLBTargetMachine> X(getTheH2BLBTarget());
+
+
+  PassRegistry &PR = *PassRegistry::getPassRegistry();
+  initializeH2BLBSimpleConstantPropagationPass(PR);
 }
 
 H2BLBTargetMachine::H2BLBTargetMachine(const Target &T, const Triple &TT,
@@ -55,8 +60,12 @@ H2BLBTargetMachine::getSubtargetImpl(const Function &F) const {
   return SubtargetSingleton.get();
 }
 
-
 TargetTransformInfo
 H2BLBTargetMachine::getTargetTransformInfo(const Function &F) const {
   return TargetTransformInfo(std::make_unique<H2BLBTTIImpl>(this, F));
+}
+
+void H2BLBTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
+#define GET_PASS_REGISTRY "H2BLBPassRegistry.def"
+#include "llvm/Passes/TargetPassRegistry.inc"
 }
