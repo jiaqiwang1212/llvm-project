@@ -1,8 +1,10 @@
 add_llvm_component_library(LLVMH2BLBDesc
-  H2BLBTargetDesc.cpp
+  H2BLBMCTargetDesc.cpp
 
   LINK_COMPONENTS
   Support
+  H2BLBInfo
+  MC
 
   ADD_TO_COMPONENT
   H2BLB
