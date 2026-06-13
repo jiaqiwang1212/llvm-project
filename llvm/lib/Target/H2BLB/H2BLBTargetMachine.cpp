@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 #include "H2BLBTargetMachine.h"
 #include "H2BLB.h"
+#include "H2BLBTargetObjectFile.h"
 #include "H2BLBTargetTransformInfo.h"
 #include "TargetInfo/H2BLBTargetInfo.h" // For getTheH2BLBTarget.
 #include "llvm/MC/TargetRegistry.h"     // For RegisterTargetMachine.
@@ -29,6 +30,15 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeH2BLBTarget() {
   initializeH2BLBSimpleConstantPropagationPass(PR);
 }
 
+static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
+  if (TT.isOSBinFormatELF())
+    return std::make_unique<H2BLB_ELFTargetObjectFile>();
+  if (TT.isOSBinFormatMachO())
+    return std::make_unique<H2BLB_MachoTargetObjectFile>();
+  // Other format not supported yet.
+  return nullptr;
+}
+
 H2BLBTargetMachine::H2BLBTargetMachine(const Target &T, const Triple &TT,
                                        StringRef CPU, StringRef FS,
                                        const TargetOptions &Options,
@@ -38,7 +48,10 @@ H2BLBTargetMachine::H2BLBTargetMachine(const Target &T, const Triple &TT,
     : CodeGenTargetMachineImpl(T, TT.computeDataLayout(), TT, CPU, FS, Options,
                                // Use the simplest relocation by default.
                                RM ? *RM : Reloc::Static,
-                               CM ? *CM : CodeModel::Small, OL) {}
+                               CM ? *CM : CodeModel::Small, OL),
+      TLOF(createTLOF(getTargetTriple())) {
+  initAsmInfo();
+}
 
 H2BLBTargetMachine::~H2BLBTargetMachine() = default;
 
@@ -59,6 +72,7 @@ H2BLBTargetMachine::getSubtargetImpl(const Function &F) const {
         std::make_unique<H2BLBSubtarget>(TargetTriple, CPU, FS, *this);
   return SubtargetSingleton.get();
 }
+
 
 TargetTransformInfo
 H2BLBTargetMachine::getTargetTransformInfo(const Function &F) const {

@@ -11,6 +11,7 @@ add_llvm_target(H2BLBCodeGen
   H2BLBSubtarget.cpp
   H2BLBISelLowering.cpp
   H2BLBTargetTransformInfo.cpp
+  H2BLBTargetObjectFile.cpp
   H2BLBSimpleConstantPropagation.cpp
 
   LINK_COMPONENTS
