@@ -47,7 +47,7 @@ static Value *visitBinary(Instruction &Instr, LLVMContext &Ctxt,
   std::optional<APInt> Res = Computation(LHS->getValue(), RHS->getValue());
   if (!Res.has_value())
     return nullptr;
-  auto NewConstant = ConstantInt::get(Ctxt, *Res);
+  auto *NewConstant = ConstantInt::get(Ctxt, *Res);
   return NewConstant;
 }
 
