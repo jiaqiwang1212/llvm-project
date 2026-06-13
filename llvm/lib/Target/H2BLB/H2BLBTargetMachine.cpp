@@ -13,6 +13,7 @@
 #include "H2BLB.h"
 #include "H2BLBTargetObjectFile.h"
 #include "H2BLBTargetTransformInfo.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
 #include "TargetInfo/H2BLBTargetInfo.h" // For getTheH2BLBTarget.
 #include "llvm/MC/TargetRegistry.h"     // For RegisterTargetMachine.
 #include "llvm/Passes/PassBuilder.h"
@@ -93,4 +94,16 @@ void H2BLBTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         FPM.addPass(H2BLBSimpleConstantPropagationNewPass());
         MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
       });
+}
+
+TargetPassConfig *H2BLBTargetMachine::createPassConfig(PassManagerBase &PM) {
+  return new H2BLBPassConfig(*this, PM);
+}
+
+H2BLBPassConfig::H2BLBPassConfig(TargetMachine &TM, PassManagerBase &PM)
+    : TargetPassConfig(TM, PM) {}
+
+bool H2BLBPassConfig::addInstSelector() {
+  // TODO: We need to hook up the DAG selector here.
+  return false;
 }
