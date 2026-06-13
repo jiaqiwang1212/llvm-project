@@ -19,6 +19,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/Compiler.h" // For LLVM_EXTERNAL_VISIBILITY.
 #include <memory>
+#include "llvm/Support/CodeGen.h"  // For CodeGenOptLevel.
 
 using namespace llvm;
 
@@ -106,4 +107,11 @@ H2BLBPassConfig::H2BLBPassConfig(TargetMachine &TM, PassManagerBase &PM)
 bool H2BLBPassConfig::addInstSelector() {
   // TODO: We need to hook up the DAG selector here.
   return false;
+}
+
+void H2BLBPassConfig::addIRPasses() {
+  // Add the regular IR passes before putting our passes.
+  TargetPassConfig::addIRPasses();
+  if (getOptLevel() != CodeGenOptLevel::None)
+    addPass(createH2BLBSimpleConstantPropagationPassForLegacyPM());
 }
